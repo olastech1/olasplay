@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import SongCard from "@/components/cards/SongCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { createSongSchema, createBreadcrumbSchema } from "@/lib/structuredData";
 
 const SongDetail = () => {
   const { slug } = useParams();
@@ -164,19 +165,24 @@ const SongDetail = () => {
     );
   }
 
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "MusicRecording",
-    name: song.title,
-    byArtist: {
-      "@type": "MusicGroup",
-      name: song.artist
-    },
-    duration: `PT${song.duration.replace(":", "M")}S`,
+  const songSchema = createSongSchema({
+    title: song.title,
+    artist: song.artist,
+    coverUrl: song.coverUrl,
+    duration: song.duration,
     genre: song.genre,
-    datePublished: song.releaseDate,
-    url: `https://olasplay.com/song/${song.slug}`
-  };
+    releaseDate: song.releaseDate,
+    slug: song.slug,
+    description: song.description,
+  });
+
+  const breadcrumbSchema = createBreadcrumbSchema([
+    { name: "Home", url: "/" },
+    { name: "Songs", url: "/songs" },
+    { name: song.title, url: `/song/${song.slug}` },
+  ]);
+
+  const structuredData = [songSchema, breadcrumbSchema];
 
   const handleDownload = () => {
     if (song.downloadUrl) {
