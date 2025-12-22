@@ -2,13 +2,39 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SongCard from "@/components/cards/SongCard";
-import { mockSongs } from "@/data/mockData";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TrendingSection = () => {
-  // Sort by plays for trending
-  const trendingSongs = [...mockSongs]
-    .sort((a, b) => b.plays - a.plays)
-    .slice(0, 4);
+  const { data: trendingSongs = [], isLoading } = useQuery({
+    queryKey: ['trending-songs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('songs')
+        .select('id, title, slug, cover_url, duration, plays, downloads, genre, artists:artist_id(name)')
+        .eq('is_trending', true)
+        .order('plays', { ascending: false })
+        .limit(4);
+      
+      if (error) throw error;
+      
+      return data.map(song => ({
+        id: song.id,
+        title: song.title,
+        slug: song.slug,
+        coverUrl: song.cover_url || '/placeholder.svg',
+        duration: song.duration || '0:00',
+        plays: song.plays || 0,
+        downloads: song.downloads || 0,
+        genre: song.genre || 'Music',
+        artist: song.artists?.name || 'Unknown Artist',
+        artistId: '',
+        releaseDate: '',
+        downloadUrl: '',
+      }));
+    },
+  });
 
   return (
     <section className="py-16 md:py-24 bg-card/30">
@@ -34,15 +60,23 @@ const TrendingSection = () => {
 
         {/* Featured Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {trendingSongs.map((song, index) => (
-            <div
-              key={song.id}
-              className="animate-fade-in"
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              <SongCard song={song} variant="featured" />
-            </div>
-          ))}
+          {isLoading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="aspect-square rounded-2xl" />
+            ))
+          ) : trendingSongs.length === 0 ? (
+            <p className="col-span-full text-center text-muted-foreground py-8">No trending songs yet.</p>
+          ) : (
+            trendingSongs.map((song, index) => (
+              <div
+                key={song.id}
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <SongCard song={song} variant="featured" />
+              </div>
+            ))
+          )}
         </div>
       </div>
     </section>

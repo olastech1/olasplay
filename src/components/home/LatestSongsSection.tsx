@@ -2,10 +2,38 @@ import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SongCard from "@/components/cards/SongCard";
-import { mockSongs } from "@/data/mockData";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const LatestSongsSection = () => {
-  const latestSongs = mockSongs.slice(0, 8);
+  const { data: latestSongs = [], isLoading } = useQuery({
+    queryKey: ['latest-songs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('songs')
+        .select('id, title, slug, cover_url, duration, plays, downloads, genre, artists:artist_id(name)')
+        .order('created_at', { ascending: false })
+        .limit(8);
+      
+      if (error) throw error;
+      
+      return data.map(song => ({
+        id: song.id,
+        title: song.title,
+        slug: song.slug,
+        coverUrl: song.cover_url || '/placeholder.svg',
+        duration: song.duration || '0:00',
+        plays: song.plays || 0,
+        downloads: song.downloads || 0,
+        genre: song.genre || 'Music',
+        artist: song.artists?.name || 'Unknown Artist',
+        artistId: '',
+        releaseDate: '',
+        downloadUrl: '',
+      }));
+    },
+  });
 
   return (
     <section className="py-16 md:py-24">
@@ -26,15 +54,27 @@ const LatestSongsSection = () => {
 
         {/* Songs Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-          {latestSongs.map((song, index) => (
-            <div
-              key={song.id}
-              className="animate-fade-in"
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              <SongCard song={song} />
-            </div>
-          ))}
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="space-y-3">
+                <Skeleton className="aspect-square rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))
+          ) : latestSongs.length === 0 ? (
+            <p className="col-span-full text-center text-muted-foreground py-8">No songs available yet.</p>
+          ) : (
+            latestSongs.map((song, index) => (
+              <div
+                key={song.id}
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <SongCard song={song} />
+              </div>
+            ))
+          )}
         </div>
       </div>
     </section>
