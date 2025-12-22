@@ -51,10 +51,11 @@ const Songs = () => {
             </div>
 
             {/* Genre Filter */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible scrollbar-hide">
               <Button
                 variant={selectedGenre === null ? "default" : "outline"}
                 size="sm"
+                className="flex-shrink-0"
                 onClick={() => setSelectedGenre(null)}
               >
                 All
@@ -64,6 +65,7 @@ const Songs = () => {
                   key={category.id}
                   variant={selectedGenre === category.name ? "default" : "outline"}
                   size="sm"
+                  className="flex-shrink-0"
                   onClick={() => setSelectedGenre(category.name)}
                 >
                   {category.name}
