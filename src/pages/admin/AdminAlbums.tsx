@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Disc3 } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
+import AlbumForm from '@/components/admin/AlbumForm';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -10,6 +11,7 @@ interface Album {
   id: string;
   title: string;
   slug: string;
+  artist_id: string | null;
   cover_url: string | null;
   genre: string | null;
   release_date: string | null;
@@ -22,6 +24,8 @@ const AdminAlbums = () => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingAlbum, setEditingAlbum] = useState<Album | null>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -29,7 +33,7 @@ const AdminAlbums = () => {
     const { data, error } = await supabase
       .from('albums')
       .select(`
-        id, title, slug, cover_url, genre, release_date, track_count, created_at,
+        id, title, slug, artist_id, cover_url, genre, release_date, track_count, created_at,
         artists:artist_id (name)
       `)
       .order('created_at', { ascending: false });
@@ -63,6 +67,22 @@ const AdminAlbums = () => {
     }
   };
 
+  const handleEdit = (album: Album) => {
+    setEditingAlbum(album);
+    setShowForm(true);
+  };
+
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingAlbum(null);
+    fetchAlbums();
+  };
+
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingAlbum(null);
+  };
+
   const filteredAlbums = albums.filter(
     (album) =>
       album.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -79,7 +99,7 @@ const AdminAlbums = () => {
             <p className="text-muted-foreground mt-1">Manage music albums</p>
           </div>
           {isAdmin && (
-            <Button variant="gradient" className="gap-2">
+            <Button variant="gradient" className="gap-2" onClick={() => setShowForm(true)}>
               <Plus className="w-4 h-4" />
               Add Album
             </Button>
@@ -107,7 +127,7 @@ const AdminAlbums = () => {
               <Disc3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">No albums found</p>
               {isAdmin && (
-                <Button variant="outline" className="mt-4 gap-2">
+                <Button variant="outline" className="mt-4 gap-2" onClick={() => setShowForm(true)}>
                   <Plus className="w-4 h-4" />
                   Add your first album
                 </Button>
@@ -136,7 +156,7 @@ const AdminAlbums = () => {
                   </div>
                   {isAdmin && (
                     <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-border">
-                      <Button variant="ghost" size="sm" className="gap-1">
+                      <Button variant="ghost" size="sm" className="gap-1" onClick={() => handleEdit(album)}>
                         <Edit2 className="w-3 h-3" />
                         Edit
                       </Button>
@@ -157,6 +177,15 @@ const AdminAlbums = () => {
           )}
         </div>
       </div>
+
+      {/* Album Form Modal */}
+      {showForm && (
+        <AlbumForm
+          album={editingAlbum}
+          onClose={handleFormClose}
+          onSuccess={handleFormSuccess}
+        />
+      )}
     </AdminLayout>
   );
 };

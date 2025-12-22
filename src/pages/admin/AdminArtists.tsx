@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Users } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
+import ArtistForm from '@/components/admin/ArtistForm';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -11,6 +12,7 @@ interface Artist {
   name: string;
   slug: string;
   image_url: string | null;
+  bio: string | null;
   genre: string | null;
   followers: number;
   song_count: number;
@@ -21,6 +23,8 @@ const AdminArtists = () => {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingArtist, setEditingArtist] = useState<Artist | null>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -59,6 +63,22 @@ const AdminArtists = () => {
     }
   };
 
+  const handleEdit = (artist: Artist) => {
+    setEditingArtist(artist);
+    setShowForm(true);
+  };
+
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingArtist(null);
+    fetchArtists();
+  };
+
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingArtist(null);
+  };
+
   const filteredArtists = artists.filter((artist) =>
     artist.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -73,7 +93,7 @@ const AdminArtists = () => {
             <p className="text-muted-foreground mt-1">Manage artists and musicians</p>
           </div>
           {isAdmin && (
-            <Button variant="gradient" className="gap-2">
+            <Button variant="gradient" className="gap-2" onClick={() => setShowForm(true)}>
               <Plus className="w-4 h-4" />
               Add Artist
             </Button>
@@ -101,7 +121,7 @@ const AdminArtists = () => {
               <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">No artists found</p>
               {isAdmin && (
-                <Button variant="outline" className="mt-4 gap-2">
+                <Button variant="outline" className="mt-4 gap-2" onClick={() => setShowForm(true)}>
                   <Plus className="w-4 h-4" />
                   Add your first artist
                 </Button>
@@ -131,7 +151,7 @@ const AdminArtists = () => {
                 </div>
                 {isAdmin && (
                   <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-border">
-                    <Button variant="ghost" size="sm" className="gap-1">
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => handleEdit(artist)}>
                       <Edit2 className="w-3 h-3" />
                       Edit
                     </Button>
@@ -151,6 +171,15 @@ const AdminArtists = () => {
           )}
         </div>
       </div>
+
+      {/* Artist Form Modal */}
+      {showForm && (
+        <ArtistForm
+          artist={editingArtist}
+          onClose={handleFormClose}
+          onSuccess={handleFormSuccess}
+        />
+      )}
     </AdminLayout>
   );
 };
