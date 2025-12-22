@@ -57,6 +57,22 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
     return data.data;
   };
 
+  const generateDescription = async (title: string, artist: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-description', {
+        body: { title, artist },
+      });
+      
+      if (error || !data?.description) {
+        return `${title} by ${artist}. Stream and download now.`;
+      }
+      
+      return data.description;
+    } catch {
+      return `${title} by ${artist}. Stream and download now.`;
+    }
+  };
+
   const saveSongToDatabase = async (song: ImportedSong): Promise<void> => {
     // Generate slug
     const slug = `${song.artist}-${song.title}`
@@ -64,13 +80,16 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') + '-mp3-download';
 
+    // Generate AI description
+    const description = await generateDescription(song.title, song.artist);
+
     const { error } = await supabase.from('songs').insert({
       title: song.title,
       slug,
       cover_url: song.thumbnail || null,
       download_url: song.audioUrl,
       genre: song.platform === 'youtube' ? 'Music' : 'Hip Hop',
-      description: `Downloaded from ${song.platform}`,
+      description,
     });
 
     if (error) {
