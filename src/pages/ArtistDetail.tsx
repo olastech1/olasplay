@@ -3,19 +3,111 @@ import { Users, Music, ChevronRight } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import SEOHead from "@/components/seo/SEOHead";
 import SongCard from "@/components/cards/SongCard";
-import { mockArtists, mockSongs } from "@/data/mockData";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const ArtistDetail = () => {
   const { slug } = useParams();
-  const artist = mockArtists.find((a) => a.slug === slug) || mockArtists[0];
-  
-  const artistSongs = mockSongs.filter((song) => song.artistId === artist.id);
+
+  const { data: artist, isLoading: artistLoading } = useQuery({
+    queryKey: ['artist', slug],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('artists')
+        .select('*')
+        .eq('slug', slug)
+        .maybeSingle();
+      
+      if (error) throw error;
+      if (!data) return null;
+      
+      return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        imageUrl: data.image_url || '/placeholder.svg',
+        genre: data.genre || 'Music',
+        followers: data.followers || 0,
+        songCount: data.song_count || 0,
+        bio: data.bio,
+      };
+    },
+    enabled: !!slug,
+  });
+
+  const { data: artistSongs = [], isLoading: songsLoading } = useQuery({
+    queryKey: ['artist-songs', artist?.id],
+    queryFn: async () => {
+      if (!artist) return [];
+      
+      const { data, error } = await supabase
+        .from('songs')
+        .select('id, title, slug, cover_url, duration, plays, downloads, genre')
+        .eq('artist_id', artist.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      return data.map(song => ({
+        id: song.id,
+        title: song.title,
+        slug: song.slug,
+        coverUrl: song.cover_url || '/placeholder.svg',
+        duration: song.duration || '0:00',
+        plays: song.plays || 0,
+        downloads: song.downloads || 0,
+        genre: song.genre || 'Music',
+        artist: artist.name,
+        artistId: artist.id,
+        releaseDate: '',
+        downloadUrl: '',
+      }));
+    },
+    enabled: !!artist,
+  });
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
     return num.toString();
   };
+
+  if (artistLoading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-12">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+            <Skeleton className="w-48 h-48 md:w-56 md:h-56 rounded-full" />
+            <div className="flex-1 space-y-4 text-center md:text-left">
+              <Skeleton className="h-6 w-32 mx-auto md:mx-0" />
+              <Skeleton className="h-12 w-64 mx-auto md:mx-0" />
+              <div className="flex gap-6 justify-center md:justify-start">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-6 w-24" />
+              </div>
+              <Skeleton className="h-20 w-full max-w-2xl" />
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!artist) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-20 text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-4">Artist Not Found</h1>
+          <p className="text-muted-foreground mb-8">The artist you're looking for doesn't exist.</p>
+          <Link to="/artists">
+            <Button variant="gradient">Browse Artists</Button>
+          </Link>
+        </div>
+      </Layout>
+    );
+  }
 
   const structuredData = {
     "@context": "https://schema.org",
@@ -84,7 +176,7 @@ const ArtistDetail = () => {
                   </span>
                   <span className="flex items-center gap-2">
                     <Music className="w-5 h-5 text-primary" />
-                    <span className="font-semibold text-foreground">{artist.songCount}</span>
+                    <span className="font-semibold text-foreground">{artistSongs.length}</span>
                     Songs
                   </span>
                 </div>
@@ -103,7 +195,17 @@ const ArtistDetail = () => {
           <div className="container mx-auto px-4">
             <h2 className="text-2xl font-bold text-foreground mb-8">Songs by {artist.name}</h2>
             
-            {artistSongs.length > 0 ? (
+            {songsLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="space-y-3">
+                    <Skeleton className="aspect-square rounded-lg" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : artistSongs.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                 {artistSongs.map((song, index) => (
                   <div
