@@ -1,30 +1,90 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search as SearchIcon, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import Layout from "@/components/layout/Layout";
 import SEOHead from "@/components/seo/SEOHead";
 import SongCard from "@/components/cards/SongCard";
 import ArtistCard from "@/components/cards/ArtistCard";
 import { Button } from "@/components/ui/button";
-import { mockSongs, mockArtists } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
 
 const Search = () => {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "songs" | "artists">("all");
 
-  const filteredSongs = mockSongs.filter(
-    (song) =>
-      song.title.toLowerCase().includes(query.toLowerCase()) ||
-      song.artist.toLowerCase().includes(query.toLowerCase()) ||
-      song.genre.toLowerCase().includes(query.toLowerCase())
-  );
+  // Fetch all songs
+  const { data: songs = [], isLoading: songsLoading } = useQuery({
+    queryKey: ["search-songs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("songs")
+        .select("id, title, slug, cover_url, duration, plays, downloads, genre, download_url, release_date, artist_id, artists:artist_id(name)")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return data.map((song) => ({
+        id: song.id,
+        title: song.title,
+        slug: song.slug,
+        coverUrl: song.cover_url || "/placeholder.svg",
+        duration: song.duration || "0:00",
+        plays: song.plays,
+        downloads: song.downloads,
+        genre: song.genre || "Music",
+        artist: (song.artists as any)?.name || "Unknown Artist",
+        artistId: song.artist_id || "",
+        downloadUrl: song.download_url || "",
+        releaseDate: song.release_date || "",
+      }));
+    },
+  });
 
-  const filteredArtists = mockArtists.filter(
-    (artist) =>
-      artist.name.toLowerCase().includes(query.toLowerCase()) ||
-      artist.genre.toLowerCase().includes(query.toLowerCase())
-  );
+  // Fetch all artists
+  const { data: artists = [], isLoading: artistsLoading } = useQuery({
+    queryKey: ["search-artists"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("artists")
+        .select("*")
+        .order("name", { ascending: true });
+      
+      if (error) throw error;
+      return data.map((artist) => ({
+        id: artist.id,
+        name: artist.name,
+        slug: artist.slug,
+        imageUrl: artist.image_url || "/placeholder.svg",
+        genre: artist.genre || "Music",
+        followers: artist.followers,
+        songCount: artist.song_count,
+      }));
+    },
+  });
+
+  const filteredSongs = useMemo(() => {
+    if (!query) return [];
+    const lowerQuery = query.toLowerCase();
+    return songs.filter(
+      (song) =>
+        song.title.toLowerCase().includes(lowerQuery) ||
+        song.artist.toLowerCase().includes(lowerQuery) ||
+        song.genre.toLowerCase().includes(lowerQuery)
+    );
+  }, [songs, query]);
+
+  const filteredArtists = useMemo(() => {
+    if (!query) return [];
+    const lowerQuery = query.toLowerCase();
+    return artists.filter(
+      (artist) =>
+        artist.name.toLowerCase().includes(lowerQuery) ||
+        artist.genre.toLowerCase().includes(lowerQuery)
+    );
+  }, [artists, query]);
 
   const hasResults = filteredSongs.length > 0 || filteredArtists.length > 0;
+  const isLoading = songsLoading || artistsLoading;
 
   return (
     <>
@@ -64,8 +124,21 @@ const Search = () => {
             </div>
           </div>
 
+          {/* Loading State */}
+          {isLoading && query && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="space-y-3">
+                  <Skeleton className="aspect-square rounded-xl" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Tabs */}
-          {query && hasResults && (
+          {query && hasResults && !isLoading && (
             <div className="flex justify-center gap-2 mb-10">
               <Button
                 variant={activeTab === "all" ? "default" : "outline"}
@@ -89,7 +162,7 @@ const Search = () => {
           )}
 
           {/* Results */}
-          {query && (
+          {query && !isLoading && (
             <>
               {!hasResults ? (
                 <div className="text-center py-20">
