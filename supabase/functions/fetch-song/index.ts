@@ -20,56 +20,100 @@ interface DownloadResponse {
   error?: string;
 }
 
-// Extract video/audio info and download URL using cobalt API
+// Extract video/audio info and download URL using cobalt API v10
 async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
   try {
-    const response = await fetch('https://api.cobalt.tools/api/json', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: url,
-        vCodec: 'h264',
-        vQuality: '720',
-        aFormat: 'mp3',
-        isAudioOnly: true,
-        isNoTTWatermark: true,
-        isTTFullAudio: true,
-      }),
-    });
+    // Try multiple cobalt instances
+    const instances = [
+      'https://cobalt-api.bian.sh',
+      'https://cobalt.canine.tools',
+      'https://cobalt.api.timelessnesses.me',
+    ];
 
-    const data = await response.json();
-    console.log('Cobalt response:', JSON.stringify(data));
+    let lastError = '';
+    
+    for (const instance of instances) {
+      try {
+        console.log(`Trying cobalt instance: ${instance}`);
+        
+        const response = await fetch(instance, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: url,
+            downloadMode: 'audio',
+            audioFormat: 'mp3',
+            audioBitrate: '320',
+          }),
+        });
 
-    if (data.status === 'error') {
-      return { success: false, error: data.text || 'Failed to process URL' };
-    }
+        const data = await response.json();
+        console.log('Cobalt response:', JSON.stringify(data));
 
-    if (data.status === 'redirect' || data.status === 'stream') {
-      // Detect platform
-      let platform: 'youtube' | 'audiomack' | 'unknown' = 'unknown';
-      if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        platform = 'youtube';
-      } else if (url.includes('audiomack.com')) {
-        platform = 'audiomack';
+        if (data.status === 'error') {
+          lastError = data.error?.code || data.text || 'Failed to process URL';
+          console.log(`Instance ${instance} returned error: ${lastError}`);
+          continue;
+        }
+
+        if (data.status === 'tunnel' || data.status === 'redirect') {
+          // Detect platform
+          let platform: 'youtube' | 'audiomack' | 'unknown' = 'unknown';
+          if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('music.youtube.com')) {
+            platform = 'youtube';
+          } else if (url.includes('audiomack.com')) {
+            platform = 'audiomack';
+          }
+
+          return {
+            success: true,
+            data: {
+              title: data.filename?.replace(/\.[^/.]+$/, '') || 'Unknown Title',
+              artist: 'Unknown Artist',
+              duration: '',
+              thumbnail: '',
+              audioUrl: data.url,
+              platform,
+            },
+          };
+        }
+
+        if (data.status === 'picker' && data.picker && data.picker.length > 0) {
+          // Handle picker response (multiple options) - take the first audio
+          const audioItem = data.picker.find((item: any) => item.type === 'audio') || data.picker[0];
+          
+          let platform: 'youtube' | 'audiomack' | 'unknown' = 'unknown';
+          if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('music.youtube.com')) {
+            platform = 'youtube';
+          } else if (url.includes('audiomack.com')) {
+            platform = 'audiomack';
+          }
+
+          return {
+            success: true,
+            data: {
+              title: data.filename?.replace(/\.[^/.]+$/, '') || 'Unknown Title',
+              artist: 'Unknown Artist', 
+              duration: '',
+              thumbnail: audioItem.thumb || '',
+              audioUrl: audioItem.url,
+              platform,
+            },
+          };
+        }
+
+        lastError = 'Unexpected response status: ' + data.status;
+      } catch (instanceError) {
+        console.error(`Instance ${instance} failed:`, instanceError);
+        lastError = instanceError instanceof Error ? instanceError.message : 'Request failed';
+        continue;
       }
-
-      return {
-        success: true,
-        data: {
-          title: data.filename?.replace(/\.[^/.]+$/, '') || 'Unknown Title',
-          artist: 'Unknown Artist',
-          duration: '',
-          thumbnail: '',
-          audioUrl: data.url,
-          platform,
-        },
-      };
     }
 
-    return { success: false, error: 'Unexpected response from download service' };
+    return { success: false, error: lastError || 'All cobalt instances failed' };
   } catch (error) {
     console.error('Cobalt API error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
@@ -140,7 +184,7 @@ Deno.serve(async (req) => {
 
     // Validate URL
     const validUrl = url.trim();
-    const isYouTube = validUrl.includes('youtube.com') || validUrl.includes('youtu.be');
+    const isYouTube = validUrl.includes('youtube.com') || validUrl.includes('youtu.be') || validUrl.includes('music.youtube.com');
     const isAudiomack = validUrl.includes('audiomack.com');
 
     if (!isYouTube && !isAudiomack) {
