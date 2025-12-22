@@ -12,3 +12,12 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+Sitemap: https://olasplay.com/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
+
+# Block admin and API paths
+Disallow: /api/
+Disallow: /admin/
