@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Upload, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -61,6 +61,7 @@ const SongForm = ({ song, onClose, onSuccess }: SongFormProps) => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const { toast } = useToast();
 
   const isEditing = !!song?.id;
@@ -258,8 +259,63 @@ const SongForm = ({ song, onClose, onSuccess }: SongFormProps) => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Cover Image URL</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-foreground">Cover Image</label>
+            
+            {coverUrl && (
+              <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
+                <img
+                  src={coverUrl}
+                  alt="Cover preview"
+                  className="w-16 h-16 object-cover rounded-lg"
+                />
+                <span className="text-sm text-muted-foreground truncate flex-1">{coverUrl}</span>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  setUploadingCover(true);
+                  try {
+                    const fileExt = file.name.split(".").pop();
+                    const fileName = `cover-${Date.now()}.${fileExt}`;
+                    const filePath = `songs/${fileName}`;
+
+                    const { error: uploadError } = await supabase.storage
+                      .from("uploads")
+                      .upload(filePath, file);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: { publicUrl } } = supabase.storage
+                      .from("uploads")
+                      .getPublicUrl(filePath);
+
+                    setCoverUrl(publicUrl);
+                    toast({ title: "Cover uploaded successfully" });
+                  } catch (error) {
+                    toast({
+                      title: "Failed to upload cover",
+                      description: error instanceof Error ? error.message : "Unknown error",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setUploadingCover(false);
+                  }
+                }}
+                disabled={uploadingCover}
+                className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer"
+              />
+              {uploadingCover && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
+            </div>
+
+            <div className="text-xs text-muted-foreground">Or enter URL directly:</div>
             <input
               type="url"
               value={coverUrl}
