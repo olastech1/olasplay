@@ -9,7 +9,8 @@ import {
   FolderOpen, 
   LogOut,
   Menu,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -49,6 +50,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { name: 'Artists', href: '/admin/artists', icon: Users },
     { name: 'Albums', href: '/admin/albums', icon: Disc3 },
     { name: 'Categories', href: '/admin/categories', icon: FolderOpen },
+    { name: 'Settings', href: '/admin/settings', icon: Settings },
   ];
 
   const handleSignOut = async () => {
