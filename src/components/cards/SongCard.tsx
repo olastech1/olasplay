@@ -73,7 +73,7 @@ const SongCard = ({ song, variant = "default" }: SongCardProps) => {
   }
 
   return (
-    <Link to={`/song/${song.slug}`} className="music-card block">
+    <Link to={`/song/${song.slug}`} className="music-card group block">
       <div className="relative aspect-square rounded-lg overflow-hidden mb-4">
         <img
           src={song.coverUrl}
@@ -81,7 +81,7 @@ const SongCard = ({ song, variant = "default" }: SongCardProps) => {
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           loading="lazy"
         />
-        <div className="play-button">
+        <div className="play-button group-hover:opacity-100">
           <Play className="w-8 h-8 text-primary-foreground fill-current" />
         </div>
       </div>
