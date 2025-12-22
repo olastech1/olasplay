@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 import { Search, Download, Music, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 const HeroSection = () => {
+  const { data: settings } = useSiteSettings();
+
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
       {/* Background Effects */}
@@ -26,8 +29,7 @@ const HeroSection = () => {
 
           {/* Subheading */}
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-            Access millions of tracks from top artists worldwide. High-quality MP3 downloads, 
-            instant streaming, and the latest hits – all in one place.
+            {settings?.site_tagline || "Access millions of tracks from top artists worldwide. High-quality MP3 downloads, instant streaming, and the latest hits – all in one place."}
           </p>
 
           {/* Search Bar */}
