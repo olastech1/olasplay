@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
-import { Music2, Mail, MapPin } from "lucide-react";
+import { Music2, Mail } from "lucide-react";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 const Footer = () => {
+  const { data: settings } = useSiteSettings();
   const currentYear = new Date().getFullYear();
 
   const quickLinks = [
@@ -25,6 +27,10 @@ const Footer = () => {
     { name: "Sitemap", href: "/sitemap.xml" },
   ];
 
+  // Parse footer text or use default with current year
+  const footerText = settings?.footer_text?.replace("{year}", String(currentYear)) 
+    || `© ${currentYear} ${settings?.site_name || "OlasPlay"}. All rights reserved.`;
+
   return (
     <footer className="bg-card/50 border-t border-border/50 mt-20">
       <div className="container mx-auto px-4 py-12">
@@ -32,14 +38,23 @@ const Footer = () => {
           {/* Brand */}
           <div className="space-y-4">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg shadow-primary/30">
-                <Music2 className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold gradient-text">OlasPlay</span>
+              {settings?.logo_url ? (
+                <img 
+                  src={settings.logo_url} 
+                  alt={settings?.site_name || "Logo"} 
+                  className="h-10 w-auto object-contain"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg shadow-primary/30">
+                  <Music2 className="w-5 h-5 text-primary-foreground" />
+                </div>
+              )}
+              <span className="text-xl font-bold gradient-text">
+                {settings?.site_name || "OlasPlay"}
+              </span>
             </Link>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Your ultimate destination for the latest and hottest music downloads. 
-              Free MP3 downloads from top artists worldwide.
+              {settings?.site_tagline || "Your ultimate destination for the latest and hottest music downloads. Free MP3 downloads from top artists worldwide."}
             </p>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Mail className="w-4 h-4" />
@@ -102,7 +117,7 @@ const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-border/50 mt-10 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-muted-foreground text-sm">
-            © {currentYear} OlasPlay. All rights reserved.
+            {footerText}
           </p>
           <p className="text-muted-foreground text-xs">
             Music files are provided for promotional purposes only. Support the artists by purchasing their music.
