@@ -12,6 +12,7 @@ import Artists from "./pages/Artists";
 import ArtistDetail from "./pages/ArtistDetail";
 import Categories from "./pages/Categories";
 import Search from "./pages/Search";
+import Sitemap from "./pages/Sitemap";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/admin/Dashboard";
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/artist/:slug" element={<ArtistDetail />} />
               <Route path="/categories" element={<Categories />} />
               <Route path="/search" element={<Search />} />
+              <Route path="/sitemap" element={<Sitemap />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/admin" element={<Dashboard />} />
               <Route path="/admin/songs" element={<AdminSongs />} />
