@@ -3,22 +3,119 @@ import { Download, Play, Clock, Calendar, Music, ChevronRight, Share2 } from "lu
 import Layout from "@/components/layout/Layout";
 import SEOHead from "@/components/seo/SEOHead";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import SongCard from "@/components/cards/SongCard";
-import { mockSongs } from "@/data/mockData";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const SongDetail = () => {
   const { slug } = useParams();
-  const song = mockSongs.find((s) => s.slug === slug) || mockSongs[0];
-  
-  const relatedSongs = mockSongs
-    .filter((s) => s.genre === song.genre && s.id !== song.id)
-    .slice(0, 4);
+
+  const { data: song, isLoading } = useQuery({
+    queryKey: ['song', slug],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('songs')
+        .select('*, artists:artist_id(id, name, slug)')
+        .eq('slug', slug)
+        .maybeSingle();
+      
+      if (error) throw error;
+      if (!data) return null;
+      
+      return {
+        id: data.id,
+        title: data.title,
+        slug: data.slug,
+        coverUrl: data.cover_url || '/placeholder.svg',
+        duration: data.duration || '0:00',
+        plays: data.plays || 0,
+        downloads: data.downloads || 0,
+        genre: data.genre || 'Music',
+        artist: data.artists?.name || 'Unknown Artist',
+        artistId: data.artists?.id || '',
+        artistSlug: data.artists?.slug || '',
+        releaseDate: data.release_date || new Date().toISOString(),
+        downloadUrl: data.download_url || '',
+        description: data.description,
+        lyrics: data.lyrics,
+      };
+    },
+    enabled: !!slug,
+  });
+
+  const { data: relatedSongs = [] } = useQuery({
+    queryKey: ['related-songs', song?.genre, song?.id],
+    queryFn: async () => {
+      if (!song) return [];
+      
+      const { data, error } = await supabase
+        .from('songs')
+        .select('id, title, slug, cover_url, duration, plays, downloads, genre, artists:artist_id(name)')
+        .eq('genre', song.genre)
+        .neq('id', song.id)
+        .limit(4);
+      
+      if (error) throw error;
+      
+      return data.map(s => ({
+        id: s.id,
+        title: s.title,
+        slug: s.slug,
+        coverUrl: s.cover_url || '/placeholder.svg',
+        duration: s.duration || '0:00',
+        plays: s.plays || 0,
+        downloads: s.downloads || 0,
+        genre: s.genre || 'Music',
+        artist: s.artists?.name || 'Unknown Artist',
+        artistId: '',
+        releaseDate: '',
+        downloadUrl: '',
+      }));
+    },
+    enabled: !!song,
+  });
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
     return num.toString();
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-12">
+          <div className="flex flex-col md:flex-row gap-8">
+            <Skeleton className="w-64 md:w-80 aspect-square rounded-2xl" />
+            <div className="flex-1 space-y-4">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-12 w-3/4" />
+              <Skeleton className="h-6 w-48" />
+              <div className="flex gap-4 mt-6">
+                <Skeleton className="h-12 w-40" />
+                <Skeleton className="h-12 w-32" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!song) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-20 text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-4">Song Not Found</h1>
+          <p className="text-muted-foreground mb-8">The song you're looking for doesn't exist.</p>
+          <Link to="/songs">
+            <Button variant="gradient">Browse Songs</Button>
+          </Link>
+        </div>
+      </Layout>
+    );
+  }
 
   const structuredData = {
     "@context": "https://schema.org",
@@ -34,14 +131,10 @@ const SongDetail = () => {
     url: `https://olasplay.com/song/${song.slug}`
   };
 
-  const breadcrumbData = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: "https://olasplay.com" },
-      { "@type": "ListItem", position: 2, name: "Songs", item: "https://olasplay.com/songs" },
-      { "@type": "ListItem", position: 3, name: song.title, item: `https://olasplay.com/song/${song.slug}` }
-    ]
+  const handleDownload = () => {
+    if (song.downloadUrl) {
+      window.open(song.downloadUrl, '_blank');
+    }
   };
 
   return (
@@ -95,7 +188,7 @@ const SongDetail = () => {
                 </h1>
                 
                 <Link
-                  to={`/artist/${song.artistId}`}
+                  to={`/artist/${song.artistSlug || song.artistId}`}
                   className="text-xl text-muted-foreground hover:text-primary transition-colors"
                 >
                   {song.artist}
@@ -107,14 +200,16 @@ const SongDetail = () => {
                     <Clock className="w-4 h-4" />
                     {song.duration}
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4" />
-                    {new Date(song.releaseDate).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric"
-                    })}
-                  </span>
+                  {song.releaseDate && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4" />
+                      {new Date(song.releaseDate).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric"
+                      })}
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <Play className="w-4 h-4" />
                     {formatNumber(song.plays)}
@@ -127,7 +222,13 @@ const SongDetail = () => {
 
                 {/* Action Buttons */}
                 <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-8">
-                  <Button variant="gradient" size="lg" className="gap-2 flex-1 sm:flex-none">
+                  <Button 
+                    variant="gradient" 
+                    size="lg" 
+                    className="gap-2 flex-1 sm:flex-none"
+                    onClick={handleDownload}
+                    disabled={!song.downloadUrl}
+                  >
                     <Download className="w-5 h-5" />
                     Download MP3
                   </Button>
