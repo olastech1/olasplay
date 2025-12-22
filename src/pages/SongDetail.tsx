@@ -72,9 +72,9 @@ const SongDetail = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background to-background h-[500px]" />
           
           <div className="container mx-auto px-4 relative z-10">
-            <div className="flex flex-col md:flex-row gap-8 items-start">
+            <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start">
               {/* Cover Art */}
-              <div className="w-full md:w-80 flex-shrink-0">
+              <div className="w-48 sm:w-64 md:w-80 flex-shrink-0">
                 <div className="aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-primary/20 glow-effect">
                   <img
                     src={song.coverUrl}
@@ -85,12 +85,12 @@ const SongDetail = () => {
               </div>
 
               {/* Song Info */}
-              <div className="flex-1">
+              <div className="flex-1 text-center md:text-left">
                 <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
                   {song.genre}
                 </span>
                 
-                <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-2">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-2">
                   {song.title}
                 </h1>
                 
@@ -102,32 +102,32 @@ const SongDetail = () => {
                 </Link>
 
                 {/* Stats */}
-                <div className="flex flex-wrap items-center gap-6 mt-6 text-muted-foreground">
-                  <span className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 md:gap-6 mt-6 text-muted-foreground text-sm md:text-base">
+                  <span className="flex items-center gap-1.5">
                     <Clock className="w-4 h-4" />
                     {song.duration}
                   </span>
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5">
                     <Calendar className="w-4 h-4" />
                     {new Date(song.releaseDate).toLocaleDateString("en-US", {
                       year: "numeric",
-                      month: "long",
+                      month: "short",
                       day: "numeric"
                     })}
                   </span>
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5">
                     <Play className="w-4 h-4" />
-                    {formatNumber(song.plays)} plays
+                    {formatNumber(song.plays)}
                   </span>
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5">
                     <Download className="w-4 h-4" />
-                    {formatNumber(song.downloads)} downloads
+                    {formatNumber(song.downloads)}
                   </span>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex flex-wrap gap-4 mt-8">
-                  <Button variant="gradient" size="lg" className="gap-2">
+                <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-8">
+                  <Button variant="gradient" size="lg" className="gap-2 flex-1 sm:flex-none">
                     <Download className="w-5 h-5" />
                     Download MP3
                   </Button>
@@ -135,7 +135,7 @@ const SongDetail = () => {
                     <Play className="w-5 h-5" />
                     Preview
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-12 w-12">
+                  <Button variant="ghost" size="icon" className="h-11 w-11">
                     <Share2 className="w-5 h-5" />
                   </Button>
                 </div>

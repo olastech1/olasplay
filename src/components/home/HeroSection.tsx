@@ -13,9 +13,9 @@ const HeroSection = () => {
       <div className="container mx-auto px-4 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary mb-8 animate-fade-in">
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-sm font-medium">Trending Now • 10,000+ Daily Downloads</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/10 border border-primary/20 text-primary mb-6 md:mb-8 animate-fade-in">
+            <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <span className="text-xs md:text-sm font-medium">Trending • 10K+ Downloads</span>
           </div>
 
           {/* Main Heading */}
