@@ -60,7 +60,7 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
   const generateDescription = async (title: string, artist: string): Promise<string> => {
     try {
       const { data, error } = await supabase.functions.invoke('generate-description', {
-        body: { title, artist },
+        body: { title, artist, type: 'description' },
       });
       
       if (error || !data?.description) {
@@ -70,6 +70,22 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
       return data.description;
     } catch {
       return `${title} by ${artist}. Stream and download now.`;
+    }
+  };
+
+  const generateSummary = async (title: string, artist: string): Promise<string> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-description', {
+        body: { title, artist, type: 'summary' },
+      });
+      
+      if (error || !data?.summary) {
+        return '';
+      }
+      
+      return data.summary;
+    } catch {
+      return '';
     }
   };
 
@@ -118,8 +134,11 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') + '-mp3-download';
 
-    // Generate AI description
-    const description = await generateDescription(song.title, song.artist);
+    // Generate AI description and summary in parallel
+    const [description, summary] = await Promise.all([
+      generateDescription(song.title, song.artist),
+      generateSummary(song.title, song.artist),
+    ]);
 
     const { error } = await supabase.from('songs').insert({
       title: song.title,
@@ -128,6 +147,7 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
       download_url: song.audioUrl,
       genre: song.platform === 'youtube' ? 'Music' : 'Hip Hop',
       description,
+      lyrics: summary, // Store AI summary in lyrics field
       artist_id: artistId,
     });
 

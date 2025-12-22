@@ -342,18 +342,18 @@ const SongDetail = () => {
           </div>
         </section>
 
-        {/* Lyrics Section */}
+        {/* Song Analysis Section */}
         {song.lyrics && (
           <section className="py-12 bg-card/30">
             <div className="container mx-auto px-4">
               <h2 className="text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
                 <Music className="w-6 h-6 text-primary" />
-                Lyrics
+                Song Analysis
               </h2>
               <div className="glass-card p-6 md:p-8 max-w-3xl">
-                <pre className="font-sans text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
                   {song.lyrics}
-                </pre>
+                </div>
               </div>
             </div>
           </section>
