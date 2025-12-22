@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { X, Link2, Loader2, Music, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -17,11 +18,26 @@ interface SongImporterProps {
   onSuccess: () => void;
 }
 
+type ImportStatus = 'pending' | 'loading' | 'success' | 'error';
+
+interface ImportResult {
+  url: string;
+  status: ImportStatus;
+  song?: ImportedSong;
+  error?: string;
+}
+
 const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
   const [urls, setUrls] = useState('');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<{ url: string; status: 'pending' | 'loading' | 'success' | 'error'; song?: ImportedSong; error?: string }[]>([]);
+  const [results, setResults] = useState<ImportResult[]>([]);
   const { toast } = useToast();
+
+  const progress = useMemo(() => {
+    if (results.length === 0) return 0;
+    const completed = results.filter(r => r.status === 'success' || r.status === 'error').length;
+    return Math.round((completed / results.length) * 100);
+  }, [results]);
 
   const parseUrls = (text: string): string[] => {
     return text
@@ -198,7 +214,21 @@ https://youtu.be/...`}
           </>
         ) : (
           <>
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {/* Progress bar */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-foreground">
+                  {loading ? 'Importing...' : 'Import Complete'}
+                </span>
+                <span className="text-sm font-medium text-primary">{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+              <p className="text-xs text-muted-foreground mt-1">
+                {results.filter(r => r.status === 'success').length} succeeded, {results.filter(r => r.status === 'error').length} failed of {results.length} total
+              </p>
+            </div>
+
+            <div className="space-y-3 max-h-[350px] overflow-y-auto">
               {results.map((result, index) => (
                 <div 
                   key={index} 
