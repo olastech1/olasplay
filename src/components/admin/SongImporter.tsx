@@ -65,6 +65,24 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
     }
   };
 
+  const processUrl = async (url: string, index: number): Promise<boolean> => {
+    setResults(prev => prev.map((r, idx) => idx === index ? { ...r, status: 'loading' } : r));
+
+    try {
+      const song = await fetchSongData(url);
+      await saveSongToDatabase(song);
+      setResults(prev => prev.map((r, idx) => idx === index ? { ...r, status: 'success', song } : r));
+      return true;
+    } catch (error) {
+      setResults(prev => prev.map((r, idx) => idx === index ? { 
+        ...r, 
+        status: 'error', 
+        error: error instanceof Error ? error.message : 'Import failed' 
+      } : r));
+      return false;
+    }
+  };
+
   const handleImport = async () => {
     const urlList = parseUrls(urls);
     
@@ -76,31 +94,22 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
     setLoading(true);
     setResults(urlList.map(url => ({ url, status: 'pending' })));
 
+    const CONCURRENT_LIMIT = 3;
     let successCount = 0;
-
-    for (let i = 0; i < urlList.length; i++) {
-      const url = urlList[i];
+    
+    // Process URLs in batches of CONCURRENT_LIMIT
+    for (let i = 0; i < urlList.length; i += CONCURRENT_LIMIT) {
+      const batch = urlList.slice(i, i + CONCURRENT_LIMIT);
+      const batchPromises = batch.map((url, batchIndex) => 
+        processUrl(url, i + batchIndex)
+      );
       
-      // Update status to loading
-      setResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'loading' } : r));
-
-      try {
-        const song = await fetchSongData(url);
-        await saveSongToDatabase(song);
-        
-        setResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'success', song } : r));
-        successCount++;
-      } catch (error) {
-        setResults(prev => prev.map((r, idx) => idx === i ? { 
-          ...r, 
-          status: 'error', 
-          error: error instanceof Error ? error.message : 'Import failed' 
-        } : r));
-      }
-
-      // Small delay between requests
-      if (i < urlList.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      const batchResults = await Promise.all(batchPromises);
+      successCount += batchResults.filter(Boolean).length;
+      
+      // Small delay between batches to avoid rate limiting
+      if (i + CONCURRENT_LIMIT < urlList.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
