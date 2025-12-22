@@ -1,15 +1,21 @@
+import { useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Download, Play, Clock, Calendar, Music, ChevronRight, Share2 } from "lucide-react";
+import { Download, Play, Pause, Clock, Calendar, Music, ChevronRight, Share2, Volume2 } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import SEOHead from "@/components/seo/SEOHead";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
 import SongCard from "@/components/cards/SongCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
 const SongDetail = () => {
   const { slug } = useParams();
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const { data: song, isLoading } = useQuery({
     queryKey: ['song', slug],
@@ -82,6 +88,47 @@ const SongDetail = () => {
     return num.toString();
   };
 
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const togglePlay = () => {
+    if (!audioRef.current || !song?.downloadUrl) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleSeek = (value: number[]) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = value[0];
+      setCurrentTime(value[0]);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -149,6 +196,18 @@ const SongDetail = () => {
         structuredData={structuredData}
       />
       <Layout>
+        {/* Hidden Audio Element */}
+        {song.downloadUrl && (
+          <audio
+            ref={audioRef}
+            src={song.downloadUrl}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onEnded={handleEnded}
+            preload="metadata"
+          />
+        )}
+
         {/* Breadcrumb */}
         <div className="container mx-auto px-4 py-6">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -220,8 +279,42 @@ const SongDetail = () => {
                   </span>
                 </div>
 
+                {/* Audio Player */}
+                {song.downloadUrl && (
+                  <div className="mt-6 p-4 rounded-xl bg-card/50 border border-border max-w-lg mx-auto md:mx-0">
+                    <div className="flex items-center gap-4">
+                      <Button
+                        variant="gradient"
+                        size="icon"
+                        className="h-12 w-12 rounded-full flex-shrink-0"
+                        onClick={togglePlay}
+                      >
+                        {isPlaying ? (
+                          <Pause className="w-5 h-5" />
+                        ) : (
+                          <Play className="w-5 h-5 ml-0.5" />
+                        )}
+                      </Button>
+                      <div className="flex-1 space-y-2">
+                        <Slider
+                          value={[currentTime]}
+                          max={duration || 100}
+                          step={1}
+                          onValueChange={handleSeek}
+                          className="cursor-pointer"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{formatTime(currentTime)}</span>
+                          <span>{formatTime(duration)}</span>
+                        </div>
+                      </div>
+                      <Volume2 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
-                <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-8">
+                <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-6">
                   <Button 
                     variant="gradient" 
                     size="lg" 
@@ -231,10 +324,6 @@ const SongDetail = () => {
                   >
                     <Download className="w-5 h-5" />
                     Download MP3
-                  </Button>
-                  <Button variant="outline" size="lg" className="gap-2">
-                    <Play className="w-5 h-5" />
-                    Preview
                   </Button>
                   <Button variant="ghost" size="icon" className="h-11 w-11">
                     <Share2 className="w-5 h-5" />
