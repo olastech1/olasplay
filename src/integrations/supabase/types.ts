@@ -14,7 +14,207 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      albums: {
+        Row: {
+          artist_id: string | null
+          cover_url: string | null
+          created_at: string
+          genre: string | null
+          id: string
+          release_date: string | null
+          slug: string
+          title: string
+          track_count: number
+          updated_at: string
+        }
+        Insert: {
+          artist_id?: string | null
+          cover_url?: string | null
+          created_at?: string
+          genre?: string | null
+          id?: string
+          release_date?: string | null
+          slug: string
+          title: string
+          track_count?: number
+          updated_at?: string
+        }
+        Update: {
+          artist_id?: string | null
+          cover_url?: string | null
+          created_at?: string
+          genre?: string | null
+          id?: string
+          release_date?: string | null
+          slug?: string
+          title?: string
+          track_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "albums_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artists: {
+        Row: {
+          bio: string | null
+          created_at: string
+          followers: number
+          genre: string | null
+          id: string
+          image_url: string | null
+          name: string
+          slug: string
+          song_count: number
+          updated_at: string
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string
+          followers?: number
+          genre?: string | null
+          id?: string
+          image_url?: string | null
+          name: string
+          slug: string
+          song_count?: number
+          updated_at?: string
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string
+          followers?: number
+          genre?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string
+          slug?: string
+          song_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          created_at: string
+          icon_url: string | null
+          id: string
+          name: string
+          slug: string
+          song_count: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          icon_url?: string | null
+          id?: string
+          name: string
+          slug: string
+          song_count?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          icon_url?: string | null
+          id?: string
+          name?: string
+          slug?: string
+          song_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      songs: {
+        Row: {
+          album_id: string | null
+          artist_id: string | null
+          category_id: string | null
+          cover_url: string | null
+          created_at: string
+          description: string | null
+          download_url: string | null
+          downloads: number
+          duration: string | null
+          genre: string | null
+          id: string
+          is_trending: boolean
+          lyrics: string | null
+          plays: number
+          release_date: string | null
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          album_id?: string | null
+          artist_id?: string | null
+          category_id?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          download_url?: string | null
+          downloads?: number
+          duration?: string | null
+          genre?: string | null
+          id?: string
+          is_trending?: boolean
+          lyrics?: string | null
+          plays?: number
+          release_date?: string | null
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          album_id?: string | null
+          artist_id?: string | null
+          category_id?: string | null
+          cover_url?: string | null
+          created_at?: string
+          description?: string | null
+          download_url?: string | null
+          downloads?: number
+          duration?: string | null
+          genre?: string | null
+          id?: string
+          is_trending?: boolean
+          lyrics?: string | null
+          plays?: number
+          release_date?: string | null
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "songs_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "albums"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "songs_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "artists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "songs_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
