@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, FolderOpen } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
+import CategoryForm from '@/components/admin/CategoryForm';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +19,8 @@ interface Category {
 const AdminCategories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -56,6 +59,22 @@ const AdminCategories = () => {
     }
   };
 
+  const handleEdit = (category: Category) => {
+    setEditingCategory(category);
+    setShowForm(true);
+  };
+
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingCategory(null);
+    fetchCategories();
+  };
+
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingCategory(null);
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -66,7 +85,7 @@ const AdminCategories = () => {
             <p className="text-muted-foreground mt-1">Manage music genres and categories</p>
           </div>
           {isAdmin && (
-            <Button variant="gradient" className="gap-2">
+            <Button variant="gradient" className="gap-2" onClick={() => setShowForm(true)}>
               <Plus className="w-4 h-4" />
               Add Category
             </Button>
@@ -82,7 +101,7 @@ const AdminCategories = () => {
               <FolderOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">No categories found</p>
               {isAdmin && (
-                <Button variant="outline" className="mt-4 gap-2">
+                <Button variant="outline" className="mt-4 gap-2" onClick={() => setShowForm(true)}>
                   <Plus className="w-4 h-4" />
                   Add your first category
                 </Button>
@@ -106,7 +125,7 @@ const AdminCategories = () => {
                 </div>
                 {isAdmin && (
                   <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-border">
-                    <Button variant="ghost" size="sm" className="gap-1">
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => handleEdit(category)}>
                       <Edit2 className="w-3 h-3" />
                       Edit
                     </Button>
@@ -126,6 +145,15 @@ const AdminCategories = () => {
           )}
         </div>
       </div>
+
+      {/* Category Form Modal */}
+      {showForm && (
+        <CategoryForm
+          category={editingCategory}
+          onClose={handleFormClose}
+          onSuccess={handleFormSuccess}
+        />
+      )}
     </AdminLayout>
   );
 };

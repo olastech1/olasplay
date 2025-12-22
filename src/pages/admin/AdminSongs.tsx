@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Music } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
+import SongForm from '@/components/admin/SongForm';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -10,10 +11,19 @@ interface Song {
   id: string;
   title: string;
   slug: string;
+  artist_id: string | null;
+  album_id: string | null;
+  category_id: string | null;
   cover_url: string | null;
+  duration: string | null;
   genre: string | null;
+  release_date: string | null;
+  download_url: string | null;
+  lyrics: string | null;
+  description: string | null;
   plays: number;
   downloads: number;
+  is_trending: boolean;
   created_at: string;
   artists: { name: string } | null;
 }
@@ -22,6 +32,8 @@ const AdminSongs = () => {
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -29,7 +41,8 @@ const AdminSongs = () => {
     const { data, error } = await supabase
       .from('songs')
       .select(`
-        id, title, slug, cover_url, genre, plays, downloads, created_at,
+        id, title, slug, artist_id, album_id, category_id, cover_url, duration, genre, 
+        release_date, download_url, lyrics, description, plays, downloads, is_trending, created_at,
         artists:artist_id (name)
       `)
       .order('created_at', { ascending: false });
@@ -63,6 +76,22 @@ const AdminSongs = () => {
     }
   };
 
+  const handleEdit = (song: Song) => {
+    setEditingSong(song);
+    setShowForm(true);
+  };
+
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingSong(null);
+    fetchSongs();
+  };
+
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingSong(null);
+  };
+
   const filteredSongs = songs.filter(
     (song) =>
       song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -79,7 +108,7 @@ const AdminSongs = () => {
             <p className="text-muted-foreground mt-1">Manage your music library</p>
           </div>
           {isAdmin && (
-            <Button variant="gradient" className="gap-2">
+            <Button variant="gradient" className="gap-2" onClick={() => setShowForm(true)}>
               <Plus className="w-4 h-4" />
               Add Song
             </Button>
@@ -124,7 +153,7 @@ const AdminSongs = () => {
                       <Music className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p>No songs found</p>
                       {isAdmin && (
-                        <Button variant="outline" className="mt-4 gap-2">
+                        <Button variant="outline" className="mt-4 gap-2" onClick={() => setShowForm(true)}>
                           <Plus className="w-4 h-4" />
                           Add your first song
                         </Button>
@@ -150,6 +179,11 @@ const AdminSongs = () => {
                             <p className="text-sm text-muted-foreground md:hidden truncate">
                               {song.artists?.name || 'Unknown Artist'}
                             </p>
+                            {song.is_trending && (
+                              <span className="inline-block text-xs px-2 py-0.5 rounded bg-primary/20 text-primary mt-1">
+                                Trending
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -170,7 +204,7 @@ const AdminSongs = () => {
                         <div className="flex items-center justify-end gap-2">
                           {isAdmin && (
                             <>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(song)}>
                                 <Edit2 className="w-4 h-4" />
                               </Button>
                               <Button
@@ -193,6 +227,15 @@ const AdminSongs = () => {
           </div>
         </div>
       </div>
+
+      {/* Song Form Modal */}
+      {showForm && (
+        <SongForm
+          song={editingSong}
+          onClose={handleFormClose}
+          onSuccess={handleFormSuccess}
+        />
+      )}
     </AdminLayout>
   );
 };
