@@ -1,22 +1,68 @@
-import { useState } from "react";
-import { Search, Filter } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Search } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import SEOHead from "@/components/seo/SEOHead";
 import SongCard from "@/components/cards/SongCard";
 import { Button } from "@/components/ui/button";
-import { mockSongs, categories } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const Songs = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
-  const filteredSongs = mockSongs.filter((song) => {
-    const matchesSearch =
-      song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      song.artist.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGenre = !selectedGenre || song.genre === selectedGenre;
-    return matchesSearch && matchesGenre;
+  const { data: songs = [], isLoading: songsLoading } = useQuery({
+    queryKey: ['all-songs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('songs')
+        .select('id, title, slug, cover_url, duration, plays, downloads, genre, artists:artist_id(name)')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      return data.map(song => ({
+        id: song.id,
+        title: song.title,
+        slug: song.slug,
+        coverUrl: song.cover_url || '/placeholder.svg',
+        duration: song.duration || '0:00',
+        plays: song.plays || 0,
+        downloads: song.downloads || 0,
+        genre: song.genre || 'Music',
+        artist: song.artists?.name || 'Unknown Artist',
+        artistId: '',
+        releaseDate: '',
+        downloadUrl: '',
+      }));
+    },
   });
+
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['all-categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, slug')
+        .order('name');
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const filteredSongs = useMemo(() => {
+    return songs.filter((song) => {
+      const matchesSearch =
+        song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        song.artist.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesGenre = !selectedGenre || song.genre === selectedGenre;
+      return matchesSearch && matchesGenre;
+    });
+  }, [songs, searchQuery, selectedGenre]);
+
+  const isLoading = songsLoading || categoriesLoading;
 
   return (
     <>
@@ -77,24 +123,34 @@ const Songs = () => {
           {/* Results */}
           <div className="mb-6">
             <p className="text-muted-foreground text-sm">
-              Showing {filteredSongs.length} songs
+              {isLoading ? 'Loading...' : `Showing ${filteredSongs.length} songs`}
             </p>
           </div>
 
           {/* Songs Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
-            {filteredSongs.map((song, index) => (
-              <div
-                key={song.id}
-                className="animate-fade-in"
-                style={{ animationDelay: `${index * 0.03}s` }}
-              >
-                <SongCard song={song} />
-              </div>
-            ))}
+            {isLoading ? (
+              Array.from({ length: 12 }).map((_, index) => (
+                <div key={index} className="space-y-3">
+                  <Skeleton className="aspect-square rounded-lg" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))
+            ) : (
+              filteredSongs.map((song, index) => (
+                <div
+                  key={song.id}
+                  className="animate-fade-in"
+                  style={{ animationDelay: `${index * 0.03}s` }}
+                >
+                  <SongCard song={song} />
+                </div>
+              ))
+            )}
           </div>
 
-          {filteredSongs.length === 0 && (
+          {!isLoading && filteredSongs.length === 0 && (
             <div className="text-center py-20">
               <p className="text-muted-foreground text-lg">No songs found matching your criteria.</p>
               <Button
