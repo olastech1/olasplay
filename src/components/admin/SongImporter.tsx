@@ -128,8 +128,11 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
     // Get or create artist
     const artistId = await getOrCreateArtist(song.artist);
 
+    // Clean artist name for slug (remove " - Topic" suffix)
+    const cleanArtist = song.artist.replace(/ - Topic$/i, '').trim();
+
     // Generate slug
-    const slug = `${song.artist}-${song.title}`
+    const slug = `${cleanArtist}-${song.title}`
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') + '-mp3-download';
