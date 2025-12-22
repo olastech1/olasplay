@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { title, artist } = await req.json();
+    const { title, artist, type = 'description' } = await req.json();
     
     if (!title) {
       return new Response(
@@ -25,9 +25,32 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const prompt = artist 
-      ? `Write a short, engaging description (2-3 sentences max) for a song titled "${title}" by ${artist}. Focus on the mood, genre appeal, and what makes it worth listening to. Be concise and catchy.`
-      : `Write a short, engaging description (2-3 sentences max) for a song titled "${title}". Focus on the mood, genre appeal, and what makes it worth listening to. Be concise and catchy.`;
+    let systemPrompt: string;
+    let userPrompt: string;
+
+    if (type === 'summary') {
+      systemPrompt = `You are a music journalist and critic who writes insightful song analyses. Write in a conversational, engaging tone. Format your response with clear sections using line breaks. Do not use markdown headers or bullet points.`;
+      
+      userPrompt = artist 
+        ? `Write a detailed song analysis for "${title}" by ${artist}. Include:
+
+1. MOOD & ATMOSPHERE: Describe the emotional tone and vibe of the song (2-3 sentences)
+
+2. MUSICAL STYLE: Discuss the genre, instrumentation, and production style (2-3 sentences)
+
+3. THEMES: What themes or messages might this song explore based on the title and artist's style (2-3 sentences)
+
+4. WHO WILL LOVE IT: Describe the ideal listener for this track (1-2 sentences)
+
+Keep the total length around 150-200 words. Be specific and evocative.`
+        : `Write a detailed song analysis for "${title}". Include mood, musical style, potential themes, and who might enjoy it. Keep it around 150 words.`;
+    } else {
+      systemPrompt = 'You are a music curator who writes short, catchy descriptions for songs. Keep descriptions under 50 words. Do not use quotes around the description. Be direct and engaging.';
+      
+      userPrompt = artist 
+        ? `Write a short, engaging description (2-3 sentences max) for a song titled "${title}" by ${artist}. Focus on the mood, genre appeal, and what makes it worth listening to. Be concise and catchy.`
+        : `Write a short, engaging description (2-3 sentences max) for a song titled "${title}". Focus on the mood, genre appeal, and what makes it worth listening to. Be concise and catchy.`;
+    }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -38,11 +61,8 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash-lite',
         messages: [
-          { 
-            role: 'system', 
-            content: 'You are a music curator who writes short, catchy descriptions for songs. Keep descriptions under 50 words. Do not use quotes around the description. Be direct and engaging.' 
-          },
-          { role: 'user', content: prompt }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
         ],
       }),
     });
@@ -62,14 +82,14 @@ serve(async (req) => {
       }
       const errorText = await response.text();
       console.error('AI gateway error:', response.status, errorText);
-      throw new Error('Failed to generate description');
+      throw new Error('Failed to generate content');
     }
 
     const data = await response.json();
-    const description = data.choices?.[0]?.message?.content?.trim() || '';
+    const content = data.choices?.[0]?.message?.content?.trim() || '';
 
     return new Response(
-      JSON.stringify({ description }),
+      JSON.stringify(type === 'summary' ? { summary: content } : { description: content }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
