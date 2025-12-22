@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, Music } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Music, Download } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import SongForm from '@/components/admin/SongForm';
+import SongImporter from '@/components/admin/SongImporter';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -33,6 +34,7 @@ const AdminSongs = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showImporter, setShowImporter] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
@@ -108,10 +110,16 @@ const AdminSongs = () => {
             <p className="text-muted-foreground mt-1">Manage your music library</p>
           </div>
           {isAdmin && (
-            <Button variant="gradient" className="gap-2" onClick={() => setShowForm(true)}>
-              <Plus className="w-4 h-4" />
-              Add Song
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2" onClick={() => setShowImporter(true)}>
+                <Download className="w-4 h-4" />
+                Import
+              </Button>
+              <Button variant="gradient" className="gap-2" onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4" />
+                Add Song
+              </Button>
+            </div>
           )}
         </div>
 
@@ -234,6 +242,17 @@ const AdminSongs = () => {
           song={editingSong}
           onClose={handleFormClose}
           onSuccess={handleFormSuccess}
+        />
+      )}
+
+      {/* Song Importer Modal */}
+      {showImporter && (
+        <SongImporter
+          onClose={() => setShowImporter(false)}
+          onSuccess={() => {
+            setShowImporter(false);
+            fetchSongs();
+          }}
         />
       )}
     </AdminLayout>

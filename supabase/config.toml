@@ -1,1 +1,4 @@
 project_id = "sxenusmscpbbzwrirbos"
+
+[functions.fetch-song]
+verify_jwt = false
