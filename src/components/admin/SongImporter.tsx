@@ -73,7 +73,45 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
     }
   };
 
+  const getOrCreateArtist = async (artistName: string): Promise<string | null> => {
+    if (!artistName || artistName === 'Unknown Artist') return null;
+
+    // Clean artist name (remove " - Topic" suffix from YouTube channels)
+    const cleanName = artistName.replace(/ - Topic$/i, '').trim();
+    const artistSlug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+    // Check if artist exists
+    const { data: existing } = await supabase
+      .from('artists')
+      .select('id')
+      .eq('slug', artistSlug)
+      .maybeSingle();
+
+    if (existing) return existing.id;
+
+    // Create new artist
+    const { data: newArtist, error } = await supabase
+      .from('artists')
+      .insert({
+        name: cleanName,
+        slug: artistSlug,
+        genre: 'Music',
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Error creating artist:', error);
+      return null;
+    }
+
+    return newArtist.id;
+  };
+
   const saveSongToDatabase = async (song: ImportedSong): Promise<void> => {
+    // Get or create artist
+    const artistId = await getOrCreateArtist(song.artist);
+
     // Generate slug
     const slug = `${song.artist}-${song.title}`
       .toLowerCase()
@@ -90,6 +128,7 @@ const SongImporter = ({ onClose, onSuccess }: SongImporterProps) => {
       download_url: song.audioUrl,
       genre: song.platform === 'youtube' ? 'Music' : 'Hip Hop',
       description,
+      artist_id: artistId,
     });
 
     if (error) {
