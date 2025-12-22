@@ -1,9 +1,31 @@
 import Layout from "@/components/layout/Layout";
 import SEOHead from "@/components/seo/SEOHead";
 import CategoryCard from "@/components/cards/CategoryCard";
-import { categories } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const Categories = () => {
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ['all-categories-page'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, slug, song_count, icon_url')
+        .order('name');
+      
+      if (error) throw error;
+      
+      return data.map(category => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        songCount: category.song_count || 0,
+        iconUrl: category.icon_url,
+      }));
+    },
+  });
+
   return (
     <>
       <SEOHead
@@ -24,15 +46,25 @@ const Categories = () => {
 
           {/* Categories Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {categories.map((category, index) => (
-              <div
-                key={category.id}
-                className="animate-fade-in"
-                style={{ animationDelay: `${index * 0.05}s` }}
-              >
-                <CategoryCard category={category} />
-              </div>
-            ))}
+            {isLoading ? (
+              Array.from({ length: 8 }).map((_, index) => (
+                <Skeleton key={index} className="h-28 rounded-xl" />
+              ))
+            ) : categories.length === 0 ? (
+              <p className="col-span-full text-center text-muted-foreground py-12">
+                No categories available yet.
+              </p>
+            ) : (
+              categories.map((category, index) => (
+                <div
+                  key={category.id}
+                  className="animate-fade-in"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <CategoryCard category={category} />
+                </div>
+              ))
+            )}
           </div>
         </div>
       </Layout>
