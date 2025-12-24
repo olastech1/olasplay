@@ -22,9 +22,12 @@ interface DownloadResponse {
   error?: string;
 }
 
-// Y2Mate API endpoints
-const Y2MATE_ANALYZE_URL = 'https://www.y2mate.com/mates/analyzeV2/ajax';
-const Y2MATE_CONVERT_URL = 'https://www.y2mate.com/mates/convertV2/index';
+// Y2Mate API endpoints (their domains change often, so we try multiple)
+const Y2MATE_HOSTS = [
+  'https://www.y2mate.com',
+  'https://v6.www-y2mate.com',
+  'https://v5.www-y2mate.com',
+];
 
 // Extract video ID from various YouTube URL formats
 function extractYouTubeVideoId(url: string): string | null {
@@ -64,119 +67,139 @@ async function fetchYouTubeMetadata(
 
 // Use Y2Mate API to get download link
 async function fetchFromY2Mate(url: string): Promise<DownloadResponse> {
-  try {
-    console.log('Analyzing URL with Y2Mate:', url);
+  const errors: string[] = [];
 
-    // Step 1: Analyze the video URL
-    const analyzeFormData = new URLSearchParams();
-    analyzeFormData.append('k_query', url);
-    analyzeFormData.append('k_page', 'home');
-    analyzeFormData.append('hl', 'en');
-    analyzeFormData.append('q_auto', '0');
+  // Step 1: Analyze the video URL (try multiple hosts)
+  const analyzeFormData = new URLSearchParams();
+  analyzeFormData.append('k_query', url);
+  analyzeFormData.append('k_page', 'home');
+  analyzeFormData.append('hl', 'en');
+  analyzeFormData.append('q_auto', '0');
 
-    const analyzeResponse = await fetch(Y2MATE_ANALYZE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-        'Origin': 'https://www.y2mate.com',
-        'Referer': 'https://www.y2mate.com/',
-      },
-      body: analyzeFormData.toString(),
-    });
+  for (const host of Y2MATE_HOSTS) {
+    const analyzeUrl = `${host}/mates/analyzeV2/ajax`;
+    const convertUrl = `${host}/mates/convertV2/index`;
 
-    if (!analyzeResponse.ok) {
-      return { success: false, error: `Y2Mate analyze failed: HTTP ${analyzeResponse.status}` };
-    }
+    try {
+      console.log(`Analyzing URL with Y2Mate host: ${host}`);
 
-    const analyzeData = await analyzeResponse.json();
-    console.log('Y2Mate analyze response:', JSON.stringify(analyzeData));
+      const analyzeResponse = await fetch(analyzeUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+          // Some hosts block default agents; mimic a browser UA
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': host,
+          'Referer': `${host}/`,
+        },
+        body: analyzeFormData.toString(),
+      });
 
-    if (analyzeData.mess) {
-      return { success: false, error: `Y2Mate error: ${analyzeData.mess}` };
-    }
-
-    if (!analyzeData.links || !analyzeData.vid) {
-      return { success: false, error: 'Y2Mate: No download links found' };
-    }
-
-    // Get the video ID and title
-    const videoId = analyzeData.vid;
-    const title = analyzeData.title || 'Unknown Title';
-
-    // Find the best MP3 link (prefer 128kbps for speed)
-    const mp3Links = analyzeData.links?.mp3 || {};
-    let selectedKey: string | null = null;
-    let selectedQuality = '';
-
-    // Prefer 128kbps, then any available
-    for (const key of Object.keys(mp3Links)) {
-      const link = mp3Links[key];
-      if (link.q === '128kbps' || link.q === '128') {
-        selectedKey = link.k;
-        selectedQuality = link.q;
-        break;
+      if (!analyzeResponse.ok) {
+        errors.push(`${host}: analyze HTTP ${analyzeResponse.status}`);
+        continue;
       }
+
+      const analyzeData = await analyzeResponse.json();
+      console.log(`Y2Mate analyze response (${host}):`, JSON.stringify(analyzeData));
+
+      if (analyzeData.mess) {
+        errors.push(`${host}: analyze mess ${analyzeData.mess}`);
+        continue;
+      }
+
+      if (!analyzeData.links || !analyzeData.vid) {
+        errors.push(`${host}: analyze missing links/vid`);
+        continue;
+      }
+
+      const videoId: string = analyzeData.vid;
+      const title: string = analyzeData.title || 'Unknown Title';
+
+      // Find a MP3 key (prefer 128kbps)
+      const mp3Links = analyzeData.links?.mp3 || {};
+      let selectedKey: string | null = null;
+      let selectedQuality = '';
+
+      for (const k of Object.keys(mp3Links)) {
+        const link = mp3Links[k];
+        if (!link?.k) continue;
+        if (link.q === '128kbps' || link.q === '128') {
+          selectedKey = link.k;
+          selectedQuality = link.q;
+          break;
+        }
+        if (!selectedKey) {
+          selectedKey = link.k;
+          selectedQuality = link.q;
+        }
+      }
+
       if (!selectedKey) {
-        selectedKey = link.k;
-        selectedQuality = link.q;
+        errors.push(`${host}: no mp3 key`);
+        continue;
       }
+
+      console.log(`Selected MP3 quality (${host}): ${selectedQuality}`);
+
+      // Step 2: Convert
+      const convertFormData = new URLSearchParams();
+      convertFormData.append('vid', videoId);
+      convertFormData.append('k', selectedKey);
+
+      const convertResponse = await fetch(convertUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Origin': host,
+          'Referer': `${host}/`,
+        },
+        body: convertFormData.toString(),
+      });
+
+      if (!convertResponse.ok) {
+        errors.push(`${host}: convert HTTP ${convertResponse.status}`);
+        continue;
+      }
+
+      const convertData = await convertResponse.json();
+      console.log(`Y2Mate convert response (${host}):`, JSON.stringify(convertData));
+
+      if (convertData.mess) {
+        errors.push(`${host}: convert mess ${convertData.mess}`);
+        continue;
+      }
+
+      if (!convertData.dlink) {
+        errors.push(`${host}: convert missing dlink`);
+        continue;
+      }
+
+      return {
+        success: true,
+        data: {
+          title: convertData.title || title,
+          artist: 'Unknown Artist',
+          duration: '',
+          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          audioUrl: convertData.dlink,
+          platform: 'youtube',
+        },
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'unknown error';
+      errors.push(`${host}: ${msg}`);
+      continue;
     }
-
-    if (!selectedKey) {
-      return { success: false, error: 'Y2Mate: No MP3 format available' };
-    }
-
-    console.log(`Selected MP3 quality: ${selectedQuality}, key: ${selectedKey}`);
-
-    // Step 2: Convert to get download link
-    const convertFormData = new URLSearchParams();
-    convertFormData.append('vid', videoId);
-    convertFormData.append('k', selectedKey);
-
-    const convertResponse = await fetch(Y2MATE_CONVERT_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-        'Origin': 'https://www.y2mate.com',
-        'Referer': 'https://www.y2mate.com/',
-      },
-      body: convertFormData.toString(),
-    });
-
-    if (!convertResponse.ok) {
-      return { success: false, error: `Y2Mate convert failed: HTTP ${convertResponse.status}` };
-    }
-
-    const convertData = await convertResponse.json();
-    console.log('Y2Mate convert response:', JSON.stringify(convertData));
-
-    if (convertData.mess) {
-      return { success: false, error: `Y2Mate convert error: ${convertData.mess}` };
-    }
-
-    if (!convertData.dlink) {
-      return { success: false, error: 'Y2Mate: No download link returned' };
-    }
-
-    return {
-      success: true,
-      data: {
-        title: convertData.title || title,
-        artist: 'Unknown Artist',
-        duration: '',
-        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-        audioUrl: convertData.dlink,
-        platform: 'youtube',
-      },
-    };
-  } catch (error) {
-    console.error('Y2Mate error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Y2Mate request failed' };
   }
+
+  return {
+    success: false,
+    error: `Y2Mate failed on all hosts. Errors: ${errors.join('; ')}`,
+  };
 }
 
 serve(async (req) => {
