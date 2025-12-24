@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,11 +24,37 @@ interface DownloadResponse {
 }
 
 // Y2Mate API endpoints (their domains change often, so we try multiple)
-const Y2MATE_HOSTS = [
+const Y2MATE_HOSTS_FALLBACK = [
   'https://www.y2mate.com',
   'https://v6.www-y2mate.com',
   'https://v5.www-y2mate.com',
 ];
+
+// Get the cached working host from database, with fallback to static list
+async function getY2MateHosts(): Promise<string[]> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'y2mate_cached_host')
+      .single();
+
+    if (!error && data?.value) {
+      const cachedHost = data.value;
+      console.log('Using cached Y2Mate host:', cachedHost);
+      // Put cached host first, then fallbacks
+      return [cachedHost, ...Y2MATE_HOSTS_FALLBACK.filter((h) => h !== cachedHost)];
+    }
+  } catch (e) {
+    console.warn('Failed to fetch cached host, using fallback list:', e);
+  }
+
+  return Y2MATE_HOSTS_FALLBACK;
+}
 
 // Extract video ID from various YouTube URL formats
 function extractYouTubeVideoId(url: string): string | null {
@@ -69,6 +96,9 @@ async function fetchYouTubeMetadata(
 async function fetchFromY2Mate(url: string): Promise<DownloadResponse> {
   const errors: string[] = [];
 
+  // Get hosts (cached host first, then fallbacks)
+  const hosts = await getY2MateHosts();
+
   // Step 1: Analyze the video URL (try multiple hosts)
   const analyzeFormData = new URLSearchParams();
   analyzeFormData.append('k_query', url);
@@ -76,7 +106,7 @@ async function fetchFromY2Mate(url: string): Promise<DownloadResponse> {
   analyzeFormData.append('hl', 'en');
   analyzeFormData.append('q_auto', '0');
 
-  for (const host of Y2MATE_HOSTS) {
+  for (const host of hosts) {
     const analyzeUrl = `${host}/mates/analyzeV2/ajax`;
     const convertUrl = `${host}/mates/convertV2/index`;
 
