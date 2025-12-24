@@ -22,6 +22,13 @@ interface DownloadResponse {
   error?: string;
 }
 
+// Public Cobalt instances (v10+) - these support the new API format
+const COBALT_INSTANCES = [
+  'https://cobalt-api.kwiatekmiki.com',
+  'https://cobalt-api.meowing.de',
+  'https://api.cobalt.canine.tools',
+];
+
 // Extract video ID from various YouTube URL formats
 function extractYouTubeVideoId(url: string): string | null {
   const patterns = [
@@ -56,118 +63,83 @@ async function fetchYouTubeMetadata(url: string): Promise<{ title: string; autho
   }
 }
 
-// Use Cobalt API (free, uses yt-dlp under the hood)
+// Use Cobalt API v10+ format with multiple instance fallback
 async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
-  try {
-    console.log('Fetching from Cobalt API for URL:', url);
+  const errors: string[] = [];
 
-    // Cobalt API - free and open source
-    const response = await fetch('https://api.cobalt.tools/api/json', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: url,
-        vCodec: 'h264',
-        vQuality: '720',
-        aFormat: 'mp3',
-        isAudioOnly: true,
-        isNoTTWatermark: true,
-        isTTFullAudio: true,
-      }),
-    });
+  for (const instance of COBALT_INSTANCES) {
+    try {
+      console.log(`Trying Cobalt instance: ${instance}`);
 
-    const data = await response.json();
-    console.log('Cobalt API response:', JSON.stringify(data));
-
-    if (data.status === 'error') {
-      return { success: false, error: data.text || 'Failed to process URL' };
-    }
-
-    if (data.status === 'redirect' || data.status === 'stream') {
-      const videoId = extractYouTubeVideoId(url);
-      
-      return {
-        success: true,
-        data: {
-          title: 'Unknown Title',
-          artist: 'Unknown Artist',
-          duration: '',
-          thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
-          audioUrl: data.url,
-          platform: 'youtube',
+      const response = await fetch(instance, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
-      };
-    }
+        body: JSON.stringify({
+          url: url,
+          videoQuality: '720',
+          youtubeVideoCodec: 'h264',
+          filenameStyle: 'pretty',
+          downloadMode: 'audio',
+        }),
+      });
 
-    if (data.status === 'picker' && data.picker && data.picker.length > 0) {
-      // For playlists or multiple options, take the first audio
-      const audioOption = data.picker.find((p: any) => p.type === 'audio') || data.picker[0];
-      const videoId = extractYouTubeVideoId(url);
-      
-      return {
-        success: true,
-        data: {
-          title: 'Unknown Title',
-          artist: 'Unknown Artist',
-          duration: '',
-          thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
-          audioUrl: audioOption.url,
-          platform: 'youtube',
-        },
-      };
-    }
+      const data = await response.json();
+      console.log(`Cobalt response from ${instance}:`, JSON.stringify(data));
 
-    return { success: false, error: 'Unexpected response from Cobalt API' };
-  } catch (error) {
-    console.error('Cobalt API error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
+      if (data.status === 'error') {
+        const errorMsg = data.error?.code || data.error || 'Unknown error';
+        console.error(`Cobalt error from ${instance}:`, errorMsg);
+        errors.push(`${instance}: ${errorMsg}`);
+        continue;
+      }
+
+      if (data.status === 'tunnel' || data.status === 'redirect') {
+        const videoId = extractYouTubeVideoId(url);
+        return {
+          success: true,
+          data: {
+            title: 'Unknown Title',
+            artist: 'Unknown Artist',
+            duration: '',
+            thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
+            audioUrl: data.url,
+            platform: 'youtube',
+          },
+        };
+      }
+
+      if (data.status === 'picker' && data.picker && data.picker.length > 0) {
+        const audioOption = data.picker.find((p: { type?: string }) => p.type === 'audio') || data.picker[0];
+        const videoId = extractYouTubeVideoId(url);
+        
+        return {
+          success: true,
+          data: {
+            title: 'Unknown Title',
+            artist: 'Unknown Artist',
+            duration: '',
+            thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
+            audioUrl: audioOption.url,
+            platform: 'youtube',
+          },
+        };
+      }
+
+      errors.push(`${instance}: Unexpected response status: ${data.status}`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Cobalt instance ${instance} error:`, errorMsg);
+      errors.push(`${instance}: ${errorMsg}`);
+    }
   }
-}
 
-// Alternative: Use a different free service if Cobalt fails
-async function fetchFromAlternativeService(url: string): Promise<DownloadResponse> {
-  try {
-    const videoId = extractYouTubeVideoId(url);
-    if (!videoId) {
-      return { success: false, error: 'Could not extract video ID' };
-    }
-
-    console.log('Trying alternative service for video ID:', videoId);
-
-    // Try y2mate-style API (many free clones available)
-    const response = await fetch('https://api.vevioz.com/api/button/mp3/' + videoId);
-    
-    if (!response.ok) {
-      return { success: false, error: 'Alternative service unavailable' };
-    }
-
-    const html = await response.text();
-    
-    // Extract download link from HTML response
-    const linkMatch = html.match(/href="(https:\/\/[^"]+\.mp3[^"]*)"/);
-    
-    if (linkMatch && linkMatch[1]) {
-      return {
-        success: true,
-        data: {
-          title: 'Unknown Title',
-          artist: 'Unknown Artist',
-          duration: '',
-          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-          audioUrl: linkMatch[1],
-          platform: 'youtube',
-        },
-      };
-    }
-
-    return { success: false, error: 'Could not extract download link' };
-  } catch (error) {
-    console.error('Alternative service error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
-  }
+  return { 
+    success: false, 
+    error: `All Cobalt instances failed. Errors: ${errors.join('; ')}` 
+  };
 }
 
 serve(async (req) => {
@@ -205,14 +177,8 @@ serve(async (req) => {
       metadata = await fetchYouTubeMetadata(validUrl);
     }
 
-    // Try Cobalt API first (free, uses yt-dlp)
-    let downloadResult = await fetchFromCobalt(validUrl);
-
-    // If Cobalt fails for YouTube, try alternative service
-    if (!downloadResult.success && isYouTube) {
-      console.log('Cobalt failed, trying alternative service...');
-      downloadResult = await fetchFromAlternativeService(validUrl);
-    }
+    // Try Cobalt API with multiple instances
+    const downloadResult = await fetchFromCobalt(validUrl);
 
     if (!downloadResult.success) {
       return new Response(
