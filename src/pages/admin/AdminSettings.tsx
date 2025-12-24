@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings, Upload, Key, Globe, Save, Loader2 } from "lucide-react";
+import { Settings, Upload, Key, Globe, Save, Loader2, Search } from "lucide-react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,8 +134,9 @@ const AdminSettings = () => {
         </div>
 
         <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsList className="grid w-full max-w-lg grid-cols-4">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="seo">SEO</TabsTrigger>
             <TabsTrigger value="branding">Branding</TabsTrigger>
             <TabsTrigger value="api">API Keys</TabsTrigger>
           </TabsList>
@@ -196,6 +197,93 @@ const AdminSettings = () => {
                     <Save className="w-4 h-4 mr-2" />
                   )}
                   Save General Settings
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* SEO Settings */}
+          <TabsContent value="seo">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Search className="w-5 h-5" />
+                  SEO Settings
+                </CardTitle>
+                <CardDescription>
+                  Configure search engine optimization settings for better visibility
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="site_url">Site URL</Label>
+                    <Input
+                      id="site_url"
+                      value={currentData.site_url || ""}
+                      onChange={(e) => setFormData({ ...formData, site_url: e.target.value })}
+                      placeholder="https://olasplay.com"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Used for canonical URLs and sitemap generation
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="meta_description">Default Meta Description</Label>
+                    <Textarea
+                      id="meta_description"
+                      value={currentData.meta_description || ""}
+                      onChange={(e) => setFormData({ ...formData, meta_description: e.target.value })}
+                      placeholder="Download free MP3 music..."
+                      rows={3}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Max 160 characters recommended
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="meta_keywords">Default Keywords</Label>
+                    <Input
+                      id="meta_keywords"
+                      value={currentData.meta_keywords || ""}
+                      onChange={(e) => setFormData({ ...formData, meta_keywords: e.target.value })}
+                      placeholder="mp3 download, free music, songs..."
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="google_analytics_id">Google Analytics ID</Label>
+                    <Input
+                      id="google_analytics_id"
+                      value={currentData.google_analytics_id || ""}
+                      onChange={(e) => setFormData({ ...formData, google_analytics_id: e.target.value })}
+                      placeholder="G-XXXXXXXXXX"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="google_verification">Google Site Verification</Label>
+                    <Input
+                      id="google_verification"
+                      value={currentData.google_verification || ""}
+                      onChange={(e) => setFormData({ ...formData, google_verification: e.target.value })}
+                      placeholder="Verification code"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => handleSaveSettings(["site_url", "meta_description", "meta_keywords", "google_analytics_id", "google_verification"])}
+                  disabled={updateSetting.isPending}
+                >
+                  {updateSetting.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save SEO Settings
                 </Button>
               </CardContent>
             </Card>
