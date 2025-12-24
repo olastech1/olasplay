@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -22,6 +21,10 @@ interface DownloadResponse {
   };
   error?: string;
 }
+
+// Y2Mate API endpoints
+const Y2MATE_ANALYZE_URL = 'https://www.y2mate.com/mates/analyzeV2/ajax';
+const Y2MATE_CONVERT_URL = 'https://www.y2mate.com/mates/convertV2/index';
 
 // Extract video ID from various YouTube URL formats
 function extractYouTubeVideoId(url: string): string | null {
@@ -59,133 +62,121 @@ async function fetchYouTubeMetadata(
   }
 }
 
-// Cobalt public instance list (community-maintained)
-const COBALT_INSTANCE_LIST_URL = 'https://instances.cobalt.best/api';
-const COBALT_USER_AGENT = 'lovable-music-app/1.0 (+https://lovable.dev)';
-
-let cachedInstances: { expiresAt: number; instances: string[] } | null = null;
-
-async function getCobaltInstances(): Promise<string[]> {
-  const now = Date.now();
-  if (cachedInstances && cachedInstances.expiresAt > now) return cachedInstances.instances;
-
+// Use Y2Mate API to get download link
+async function fetchFromY2Mate(url: string): Promise<DownloadResponse> {
   try {
-    const res = await fetch(COBALT_INSTANCE_LIST_URL, {
-      headers: { 'User-Agent': COBALT_USER_AGENT, 'Accept': 'application/json' },
+    console.log('Analyzing URL with Y2Mate:', url);
+
+    // Step 1: Analyze the video URL
+    const analyzeFormData = new URLSearchParams();
+    analyzeFormData.append('k_query', url);
+    analyzeFormData.append('k_page', 'home');
+    analyzeFormData.append('hl', 'en');
+    analyzeFormData.append('q_auto', '0');
+
+    const analyzeResponse = await fetch(Y2MATE_ANALYZE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://www.y2mate.com',
+        'Referer': 'https://www.y2mate.com/',
+      },
+      body: analyzeFormData.toString(),
     });
 
-    if (!res.ok) throw new Error(`instance list HTTP ${res.status}`);
-
-    const list = await res.json();
-
-    const instances = (Array.isArray(list) ? list : [])
-      .filter((i: any) => i?.online === true)
-      .filter((i: any) => i?.protocol === 'https')
-      .filter((i: any) => i?.services?.youtube === true || i?.services?.['youtube music'] === true)
-      .map((i: any) => `${i.protocol}://${i.api}`)
-      // Prefer higher score when available
-      .sort((a: any, b: any) => (Number(b?.score ?? 0) - Number(a?.score ?? 0)))
-      .slice(0, 10);
-
-    if (instances.length === 0) throw new Error('no online instances found');
-
-    cachedInstances = { expiresAt: now + 10 * 60 * 1000, instances };
-    return instances;
-  } catch (e) {
-    console.warn('Failed to fetch Cobalt instance list, using fallback list:', e);
-
-    // Minimal hardcoded fallback (may change/expire)
-    const fallback = ['https://cobalt-api.kwiatekmiki.com'].slice(0, 1);
-    cachedInstances = { expiresAt: now + 2 * 60 * 1000, instances: fallback };
-    return fallback;
-  }
-}
-
-// Use Cobalt API v10+ format with instance fallback
-async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
-  const errors: string[] = [];
-  const instances = await getCobaltInstances();
-
-  for (const instance of instances) {
-    try {
-      console.log(`Trying Cobalt instance: ${instance}`);
-
-      const response = await fetch(`${instance}/`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': COBALT_USER_AGENT,
-        },
-        body: JSON.stringify({
-          url,
-          videoQuality: '720',
-          youtubeVideoCodec: 'h264',
-          filenameStyle: 'pretty',
-          downloadMode: 'audio',
-        }),
-      });
-
-      const data = await response.json();
-      console.log(`Cobalt response from ${instance}:`, JSON.stringify(data));
-
-      if (data.status === 'error') {
-        const errorCode = String(data?.error?.code ?? data?.error ?? 'unknown');
-
-        // Some instances require auth; skip them automatically
-        if (errorCode.includes('jwt') || errorCode.includes('auth')) {
-          errors.push(`${instance}: ${errorCode}`);
-          continue;
-        }
-
-        errors.push(`${instance}: ${errorCode}`);
-        continue;
-      }
-
-      if (data.status === 'tunnel' || data.status === 'redirect') {
-        const videoId = extractYouTubeVideoId(url);
-        return {
-          success: true,
-          data: {
-            title: 'Unknown Title',
-            artist: 'Unknown Artist',
-            duration: '',
-            thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
-            audioUrl: data.url,
-            platform: 'youtube',
-          },
-        };
-      }
-
-      if (data.status === 'picker' && Array.isArray(data.picker) && data.picker.length > 0) {
-        const audioOption = data.picker.find((p: any) => p?.type === 'audio') || data.picker[0];
-        const videoId = extractYouTubeVideoId(url);
-
-        return {
-          success: true,
-          data: {
-            title: 'Unknown Title',
-            artist: 'Unknown Artist',
-            duration: '',
-            thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
-            audioUrl: audioOption.url,
-            platform: 'youtube',
-          },
-        };
-      }
-
-      errors.push(`${instance}: Unexpected response status: ${data.status}`);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Cobalt instance ${instance} error:`, errorMsg);
-      errors.push(`${instance}: ${errorMsg}`);
+    if (!analyzeResponse.ok) {
+      return { success: false, error: `Y2Mate analyze failed: HTTP ${analyzeResponse.status}` };
     }
-  }
 
-  return {
-    success: false,
-    error: `All Cobalt instances failed. Errors: ${errors.join('; ')}`,
-  };
+    const analyzeData = await analyzeResponse.json();
+    console.log('Y2Mate analyze response:', JSON.stringify(analyzeData));
+
+    if (analyzeData.mess) {
+      return { success: false, error: `Y2Mate error: ${analyzeData.mess}` };
+    }
+
+    if (!analyzeData.links || !analyzeData.vid) {
+      return { success: false, error: 'Y2Mate: No download links found' };
+    }
+
+    // Get the video ID and title
+    const videoId = analyzeData.vid;
+    const title = analyzeData.title || 'Unknown Title';
+
+    // Find the best MP3 link (prefer 128kbps for speed)
+    const mp3Links = analyzeData.links?.mp3 || {};
+    let selectedKey: string | null = null;
+    let selectedQuality = '';
+
+    // Prefer 128kbps, then any available
+    for (const key of Object.keys(mp3Links)) {
+      const link = mp3Links[key];
+      if (link.q === '128kbps' || link.q === '128') {
+        selectedKey = link.k;
+        selectedQuality = link.q;
+        break;
+      }
+      if (!selectedKey) {
+        selectedKey = link.k;
+        selectedQuality = link.q;
+      }
+    }
+
+    if (!selectedKey) {
+      return { success: false, error: 'Y2Mate: No MP3 format available' };
+    }
+
+    console.log(`Selected MP3 quality: ${selectedQuality}, key: ${selectedKey}`);
+
+    // Step 2: Convert to get download link
+    const convertFormData = new URLSearchParams();
+    convertFormData.append('vid', videoId);
+    convertFormData.append('k', selectedKey);
+
+    const convertResponse = await fetch(Y2MATE_CONVERT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://www.y2mate.com',
+        'Referer': 'https://www.y2mate.com/',
+      },
+      body: convertFormData.toString(),
+    });
+
+    if (!convertResponse.ok) {
+      return { success: false, error: `Y2Mate convert failed: HTTP ${convertResponse.status}` };
+    }
+
+    const convertData = await convertResponse.json();
+    console.log('Y2Mate convert response:', JSON.stringify(convertData));
+
+    if (convertData.mess) {
+      return { success: false, error: `Y2Mate convert error: ${convertData.mess}` };
+    }
+
+    if (!convertData.dlink) {
+      return { success: false, error: 'Y2Mate: No download link returned' };
+    }
+
+    return {
+      success: true,
+      data: {
+        title: convertData.title || title,
+        artist: 'Unknown Artist',
+        duration: '',
+        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        audioUrl: convertData.dlink,
+        platform: 'youtube',
+      },
+    };
+  } catch (error) {
+    console.error('Y2Mate error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Y2Mate request failed' };
+  }
 }
 
 serve(async (req) => {
@@ -223,8 +214,8 @@ serve(async (req) => {
       metadata = await fetchYouTubeMetadata(validUrl);
     }
 
-    // Try Cobalt API with multiple instances
-    const downloadResult = await fetchFromCobalt(validUrl);
+    // Try Y2Mate API
+    const downloadResult = await fetchFromY2Mate(validUrl);
 
     if (!downloadResult.success) {
       return new Response(
