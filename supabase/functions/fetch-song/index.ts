@@ -1,3 +1,5 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -15,7 +17,7 @@ interface DownloadResponse {
     duration: string;
     thumbnail: string;
     audioUrl: string;
-    platform: 'youtube' | 'audiomack' | 'unknown';
+    platform: 'youtube' | 'audiomack' | 'soundcloud' | 'unknown';
   };
   error?: string;
 }
@@ -32,56 +34,6 @@ function extractYouTubeVideoId(url: string): string | null {
     if (match) return match[1];
   }
   return null;
-}
-
-// Fetch from RapidAPI YouTube downloader
-async function fetchFromRapidAPI(url: string): Promise<DownloadResponse> {
-  const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
-  
-  if (!rapidApiKey) {
-    return { success: false, error: 'RapidAPI key not configured' };
-  }
-
-  try {
-    const videoId = extractYouTubeVideoId(url);
-    
-    if (!videoId) {
-      return { success: false, error: 'Could not extract video ID from URL' };
-    }
-
-    console.log('Fetching video info for ID:', videoId);
-
-    // Using youtube-mp36 API on RapidAPI
-    const response = await fetch(`https://youtube-mp36.p.rapidapi.com/dl?id=${videoId}`, {
-      method: 'GET',
-      headers: {
-        'x-rapidapi-key': rapidApiKey,
-        'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
-      },
-    });
-
-    const data = await response.json();
-    console.log('RapidAPI response:', JSON.stringify(data));
-
-    if (data.status === 'fail' || !data.link) {
-      return { success: false, error: data.msg || 'Failed to get download link' };
-    }
-
-    return {
-      success: true,
-      data: {
-        title: data.title || 'Unknown Title',
-        artist: 'Unknown Artist',
-        duration: data.duration || '',
-        thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        audioUrl: data.link,
-        platform: 'youtube',
-      },
-    };
-  } catch (error) {
-    console.error('RapidAPI error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
-  }
 }
 
 // Fetch YouTube metadata using oEmbed (no API key needed)
@@ -104,32 +56,121 @@ async function fetchYouTubeMetadata(url: string): Promise<{ title: string; autho
   }
 }
 
-// Fetch Audiomack metadata by scraping (basic approach)
-async function fetchAudiomackMetadata(url: string): Promise<{ title: string; artist: string; thumbnail: string } | null> {
+// Use Cobalt API (free, uses yt-dlp under the hood)
+async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
   try {
-    // Audiomack URLs follow pattern: audiomack.com/artist/song/title
-    const urlParts = url.split('/').filter(Boolean);
-    const artistIndex = urlParts.findIndex(p => p === 'audiomack.com') + 1;
-    
-    if (artistIndex > 0 && urlParts.length > artistIndex + 2) {
-      const artist = urlParts[artistIndex].replace(/-/g, ' ');
-      const title = urlParts[artistIndex + 2]?.replace(/-/g, ' ') || 'Unknown Title';
+    console.log('Fetching from Cobalt API for URL:', url);
+
+    // Cobalt API - free and open source
+    const response = await fetch('https://api.cobalt.tools/api/json', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url,
+        vCodec: 'h264',
+        vQuality: '720',
+        aFormat: 'mp3',
+        isAudioOnly: true,
+        isNoTTWatermark: true,
+        isTTFullAudio: true,
+      }),
+    });
+
+    const data = await response.json();
+    console.log('Cobalt API response:', JSON.stringify(data));
+
+    if (data.status === 'error') {
+      return { success: false, error: data.text || 'Failed to process URL' };
+    }
+
+    if (data.status === 'redirect' || data.status === 'stream') {
+      const videoId = extractYouTubeVideoId(url);
       
       return {
-        title: title.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-        artist: artist.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-        thumbnail: '',
+        success: true,
+        data: {
+          title: 'Unknown Title',
+          artist: 'Unknown Artist',
+          duration: '',
+          thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
+          audioUrl: data.url,
+          platform: 'youtube',
+        },
       };
     }
-    
-    return null;
+
+    if (data.status === 'picker' && data.picker && data.picker.length > 0) {
+      // For playlists or multiple options, take the first audio
+      const audioOption = data.picker.find((p: any) => p.type === 'audio') || data.picker[0];
+      const videoId = extractYouTubeVideoId(url);
+      
+      return {
+        success: true,
+        data: {
+          title: 'Unknown Title',
+          artist: 'Unknown Artist',
+          duration: '',
+          thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '',
+          audioUrl: audioOption.url,
+          platform: 'youtube',
+        },
+      };
+    }
+
+    return { success: false, error: 'Unexpected response from Cobalt API' };
   } catch (error) {
-    console.error('Audiomack metadata error:', error);
-    return null;
+    console.error('Cobalt API error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
   }
 }
 
-Deno.serve(async (req) => {
+// Alternative: Use a different free service if Cobalt fails
+async function fetchFromAlternativeService(url: string): Promise<DownloadResponse> {
+  try {
+    const videoId = extractYouTubeVideoId(url);
+    if (!videoId) {
+      return { success: false, error: 'Could not extract video ID' };
+    }
+
+    console.log('Trying alternative service for video ID:', videoId);
+
+    // Try y2mate-style API (many free clones available)
+    const response = await fetch('https://api.vevioz.com/api/button/mp3/' + videoId);
+    
+    if (!response.ok) {
+      return { success: false, error: 'Alternative service unavailable' };
+    }
+
+    const html = await response.text();
+    
+    // Extract download link from HTML response
+    const linkMatch = html.match(/href="(https:\/\/[^"]+\.mp3[^"]*)"/);
+    
+    if (linkMatch && linkMatch[1]) {
+      return {
+        success: true,
+        data: {
+          title: 'Unknown Title',
+          artist: 'Unknown Artist',
+          duration: '',
+          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          audioUrl: linkMatch[1],
+          platform: 'youtube',
+        },
+      };
+    }
+
+    return { success: false, error: 'Could not extract download link' };
+  } catch (error) {
+    console.error('Alternative service error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Download failed' };
+  }
+}
+
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -149,32 +190,29 @@ Deno.serve(async (req) => {
     // Validate URL
     const validUrl = url.trim();
     const isYouTube = validUrl.includes('youtube.com') || validUrl.includes('youtu.be') || validUrl.includes('music.youtube.com');
-    const isAudiomack = validUrl.includes('audiomack.com');
+    const isSoundCloud = validUrl.includes('soundcloud.com');
 
-    if (!isYouTube && !isAudiomack) {
+    if (!isYouTube && !isSoundCloud) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Only YouTube and Audiomack URLs are supported' }),
+        JSON.stringify({ success: false, error: 'Only YouTube and SoundCloud URLs are supported' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (isAudiomack) {
-      // For Audiomack, we can only get metadata without RapidAPI support
-      const metadata = await fetchAudiomackMetadata(validUrl);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Audiomack download is not currently supported. Only YouTube is available.' 
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Fetch metadata first (for YouTube)
+    let metadata: { title: string; author: string; thumbnail: string } | null = null;
+    if (isYouTube) {
+      metadata = await fetchYouTubeMetadata(validUrl);
     }
 
-    // Fetch YouTube metadata first
-    const metadata = await fetchYouTubeMetadata(validUrl);
+    // Try Cobalt API first (free, uses yt-dlp)
+    let downloadResult = await fetchFromCobalt(validUrl);
 
-    // Get download URL from RapidAPI
-    const downloadResult = await fetchFromRapidAPI(validUrl);
+    // If Cobalt fails for YouTube, try alternative service
+    if (!downloadResult.success && isYouTube) {
+      console.log('Cobalt failed, trying alternative service...');
+      downloadResult = await fetchFromAlternativeService(validUrl);
+    }
 
     if (!downloadResult.success) {
       return new Response(
@@ -192,7 +230,7 @@ Deno.serve(async (req) => {
         duration: downloadResult.data!.duration,
         thumbnail: metadata?.thumbnail || downloadResult.data!.thumbnail,
         audioUrl: downloadResult.data!.audioUrl,
-        platform: downloadResult.data!.platform,
+        platform: isSoundCloud ? 'soundcloud' : downloadResult.data!.platform,
       },
     };
 
