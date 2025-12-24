@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -22,20 +23,13 @@ interface DownloadResponse {
   error?: string;
 }
 
-// Public Cobalt instances (v10+) - these support the new API format
-const COBALT_INSTANCES = [
-  'https://cobalt-api.kwiatekmiki.com',
-  'https://cobalt-api.meowing.de',
-  'https://api.cobalt.canine.tools',
-];
-
 // Extract video ID from various YouTube URL formats
 function extractYouTubeVideoId(url: string): string | null {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|music\.youtube\.com\/watch\?v=)([^&\n?#]+)/,
     /youtube\.com\/shorts\/([^&\n?#]+)/,
   ];
-  
+
   for (const pattern of patterns) {
     const match = url.match(pattern);
     if (match) return match[1];
@@ -44,13 +38,15 @@ function extractYouTubeVideoId(url: string): string | null {
 }
 
 // Fetch YouTube metadata using oEmbed (no API key needed)
-async function fetchYouTubeMetadata(url: string): Promise<{ title: string; author: string; thumbnail: string } | null> {
+async function fetchYouTubeMetadata(
+  url: string
+): Promise<{ title: string; author: string; thumbnail: string } | null> {
   try {
     const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
     const response = await fetch(oembedUrl);
-    
+
     if (!response.ok) return null;
-    
+
     const data = await response.json();
     return {
       title: data.title || 'Unknown Title',
@@ -63,22 +59,66 @@ async function fetchYouTubeMetadata(url: string): Promise<{ title: string; autho
   }
 }
 
-// Use Cobalt API v10+ format with multiple instance fallback
+// Cobalt public instance list (community-maintained)
+const COBALT_INSTANCE_LIST_URL = 'https://instances.cobalt.best/api';
+const COBALT_USER_AGENT = 'lovable-music-app/1.0 (+https://lovable.dev)';
+
+let cachedInstances: { expiresAt: number; instances: string[] } | null = null;
+
+async function getCobaltInstances(): Promise<string[]> {
+  const now = Date.now();
+  if (cachedInstances && cachedInstances.expiresAt > now) return cachedInstances.instances;
+
+  try {
+    const res = await fetch(COBALT_INSTANCE_LIST_URL, {
+      headers: { 'User-Agent': COBALT_USER_AGENT, 'Accept': 'application/json' },
+    });
+
+    if (!res.ok) throw new Error(`instance list HTTP ${res.status}`);
+
+    const list = await res.json();
+
+    const instances = (Array.isArray(list) ? list : [])
+      .filter((i: any) => i?.online === true)
+      .filter((i: any) => i?.protocol === 'https')
+      .filter((i: any) => i?.services?.youtube === true || i?.services?.['youtube music'] === true)
+      .map((i: any) => `${i.protocol}://${i.api}`)
+      // Prefer higher score when available
+      .sort((a: any, b: any) => (Number(b?.score ?? 0) - Number(a?.score ?? 0)))
+      .slice(0, 10);
+
+    if (instances.length === 0) throw new Error('no online instances found');
+
+    cachedInstances = { expiresAt: now + 10 * 60 * 1000, instances };
+    return instances;
+  } catch (e) {
+    console.warn('Failed to fetch Cobalt instance list, using fallback list:', e);
+
+    // Minimal hardcoded fallback (may change/expire)
+    const fallback = ['https://cobalt-api.kwiatekmiki.com'].slice(0, 1);
+    cachedInstances = { expiresAt: now + 2 * 60 * 1000, instances: fallback };
+    return fallback;
+  }
+}
+
+// Use Cobalt API v10+ format with instance fallback
 async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
   const errors: string[] = [];
+  const instances = await getCobaltInstances();
 
-  for (const instance of COBALT_INSTANCES) {
+  for (const instance of instances) {
     try {
       console.log(`Trying Cobalt instance: ${instance}`);
 
-      const response = await fetch(instance, {
+      const response = await fetch(`${instance}/`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'User-Agent': COBALT_USER_AGENT,
         },
         body: JSON.stringify({
-          url: url,
+          url,
           videoQuality: '720',
           youtubeVideoCodec: 'h264',
           filenameStyle: 'pretty',
@@ -90,9 +130,15 @@ async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
       console.log(`Cobalt response from ${instance}:`, JSON.stringify(data));
 
       if (data.status === 'error') {
-        const errorMsg = data.error?.code || data.error || 'Unknown error';
-        console.error(`Cobalt error from ${instance}:`, errorMsg);
-        errors.push(`${instance}: ${errorMsg}`);
+        const errorCode = String(data?.error?.code ?? data?.error ?? 'unknown');
+
+        // Some instances require auth; skip them automatically
+        if (errorCode.includes('jwt') || errorCode.includes('auth')) {
+          errors.push(`${instance}: ${errorCode}`);
+          continue;
+        }
+
+        errors.push(`${instance}: ${errorCode}`);
         continue;
       }
 
@@ -111,10 +157,10 @@ async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
         };
       }
 
-      if (data.status === 'picker' && data.picker && data.picker.length > 0) {
-        const audioOption = data.picker.find((p: { type?: string }) => p.type === 'audio') || data.picker[0];
+      if (data.status === 'picker' && Array.isArray(data.picker) && data.picker.length > 0) {
+        const audioOption = data.picker.find((p: any) => p?.type === 'audio') || data.picker[0];
         const videoId = extractYouTubeVideoId(url);
-        
+
         return {
           success: true,
           data: {
@@ -136,9 +182,9 @@ async function fetchFromCobalt(url: string): Promise<DownloadResponse> {
     }
   }
 
-  return { 
-    success: false, 
-    error: `All Cobalt instances failed. Errors: ${errors.join('; ')}` 
+  return {
+    success: false,
+    error: `All Cobalt instances failed. Errors: ${errors.join('; ')}`,
   };
 }
 
