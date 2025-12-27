@@ -41,7 +41,7 @@ async function getY2MateHosts(): Promise<string[]> {
       .from('site_settings')
       .select('value')
       .eq('key', 'y2mate_cached_host')
-      .single();
+      .maybeSingle();
 
     if (!error && data?.value) {
       const cachedHost = data.value;
