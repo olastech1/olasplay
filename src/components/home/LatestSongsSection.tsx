@@ -11,12 +11,13 @@ const Index = () => {
     "@type": "WebSite",
     name: "OlasPlay",
     url: "https://olasplay.com",
-    description: "Free MP3 music downloads from top artists worldwide. Download the latest songs, albums, and mixtapes.",
+    description:
+      "Free MP3 music downloads from top artists worldwide. Download the latest songs, albums, and mixtapes.",
     potentialAction: {
       "@type": "SearchAction",
       target: "https://olasplay.com/search?q={search_term_string}",
-      "query-input": "required name=search_term_string"
-    }
+      "query-input": "required name=search_term_string",
+    },
   };
   return (
     <>
