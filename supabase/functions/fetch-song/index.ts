@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,38 +22,8 @@ interface DownloadResponse {
   error?: string;
 }
 
-// Y2Mate API endpoints (their domains change often, so we try multiple)
-const Y2MATE_HOSTS_FALLBACK = [
-  'https://www.y2mate.com',
-  'https://v6.www-y2mate.com',
-  'https://v5.www-y2mate.com',
-];
-
-// Get the cached working host from database, with fallback to static list
-async function getY2MateHosts(): Promise<string[]> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-    const { data, error } = await supabase
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'y2mate_cached_host')
-      .maybeSingle();
-
-    if (!error && data?.value) {
-      const cachedHost = data.value;
-      console.log('Using cached Y2Mate host:', cachedHost);
-      // Put cached host first, then fallbacks
-      return [cachedHost, ...Y2MATE_HOSTS_FALLBACK.filter((h) => h !== cachedHost)];
-    }
-  } catch (e) {
-    console.warn('Failed to fetch cached host, using fallback list:', e);
-  }
-
-  return Y2MATE_HOSTS_FALLBACK;
-}
+// RapidAPI YouTube MP3 endpoint
+const RAPIDAPI_HOST = 'youtube-mp36.p.rapidapi.com';
 
 // Extract video ID from various YouTube URL formats
 function extractYouTubeVideoId(url: string): string | null {
@@ -92,144 +61,75 @@ async function fetchYouTubeMetadata(
   }
 }
 
-// Use Y2Mate API to get download link
-async function fetchFromY2Mate(url: string): Promise<DownloadResponse> {
-  const errors: string[] = [];
+// Use RapidAPI YouTube MP3 to get download link
+async function fetchFromRapidAPI(videoId: string): Promise<DownloadResponse> {
+  const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
 
-  // Get hosts (cached host first, then fallbacks)
-  const hosts = await getY2MateHosts();
+  if (!rapidApiKey) {
+    return { success: false, error: 'RAPIDAPI_KEY not configured' };
+  }
 
-  // Step 1: Analyze the video URL (try multiple hosts)
-  const analyzeFormData = new URLSearchParams();
-  analyzeFormData.append('k_query', url);
-  analyzeFormData.append('k_page', 'home');
-  analyzeFormData.append('hl', 'en');
-  analyzeFormData.append('q_auto', '0');
+  const maxRetries = 5;
+  let lastError = '';
 
-  for (const host of hosts) {
-    const analyzeUrl = `${host}/mates/analyzeV2/ajax`;
-    const convertUrl = `${host}/mates/convertV2/index`;
-
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      console.log(`Analyzing URL with Y2Mate host: ${host}`);
+      console.log(`RapidAPI attempt ${attempt + 1} for video ID: ${videoId}`);
 
-      const analyzeResponse = await fetch(analyzeUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-          // Some hosts block default agents; mimic a browser UA
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': host,
-          'Referer': `${host}/`,
-        },
-        body: analyzeFormData.toString(),
-      });
-
-      if (!analyzeResponse.ok) {
-        errors.push(`${host}: analyze HTTP ${analyzeResponse.status}`);
-        continue;
-      }
-
-      const analyzeData = await analyzeResponse.json();
-      console.log(`Y2Mate analyze response (${host}):`, JSON.stringify(analyzeData));
-
-      if (analyzeData.mess) {
-        errors.push(`${host}: analyze mess ${analyzeData.mess}`);
-        continue;
-      }
-
-      if (!analyzeData.links || !analyzeData.vid) {
-        errors.push(`${host}: analyze missing links/vid`);
-        continue;
-      }
-
-      const videoId: string = analyzeData.vid;
-      const title: string = analyzeData.title || 'Unknown Title';
-
-      // Find a MP3 key (prefer 128kbps)
-      const mp3Links = analyzeData.links?.mp3 || {};
-      let selectedKey: string | null = null;
-      let selectedQuality = '';
-
-      for (const k of Object.keys(mp3Links)) {
-        const link = mp3Links[k];
-        if (!link?.k) continue;
-        if (link.q === '128kbps' || link.q === '128') {
-          selectedKey = link.k;
-          selectedQuality = link.q;
-          break;
+      const response = await fetch(
+        `https://${RAPIDAPI_HOST}/dl?id=${videoId}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-rapidapi-host': RAPIDAPI_HOST,
+            'x-rapidapi-key': rapidApiKey,
+          },
         }
-        if (!selectedKey) {
-          selectedKey = link.k;
-          selectedQuality = link.q;
-        }
-      }
+      );
 
-      if (!selectedKey) {
-        errors.push(`${host}: no mp3 key`);
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}`;
+        console.error(`RapidAPI HTTP error: ${response.status}`);
         continue;
       }
 
-      console.log(`Selected MP3 quality (${host}): ${selectedQuality}`);
+      const data = await response.json();
+      console.log('RapidAPI response:', JSON.stringify(data));
 
-      // Step 2: Convert
-      const convertFormData = new URLSearchParams();
-      convertFormData.append('vid', videoId);
-      convertFormData.append('k', selectedKey);
+      if (data.status === 'ok' && data.link) {
+        return {
+          success: true,
+          data: {
+            title: data.title || 'Unknown Title',
+            artist: 'Unknown Artist',
+            duration: data.duration || '',
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+            audioUrl: data.link,
+            platform: 'youtube',
+          },
+        };
+      }
 
-      const convertResponse = await fetch(convertUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': host,
-          'Referer': `${host}/`,
-        },
-        body: convertFormData.toString(),
-      });
-
-      if (!convertResponse.ok) {
-        errors.push(`${host}: convert HTTP ${convertResponse.status}`);
+      if (data.status === 'processing') {
+        console.log('RapidAPI: still processing, waiting 1.5s...');
+        await new Promise((resolve) => setTimeout(resolve, 1500));
         continue;
       }
 
-      const convertData = await convertResponse.json();
-      console.log(`Y2Mate convert response (${host}):`, JSON.stringify(convertData));
-
-      if (convertData.mess) {
-        errors.push(`${host}: convert mess ${convertData.mess}`);
-        continue;
+      if (data.status === 'fail') {
+        lastError = data.msg || 'Conversion failed';
+        break;
       }
 
-      if (!convertData.dlink) {
-        errors.push(`${host}: convert missing dlink`);
-        continue;
-      }
-
-      return {
-        success: true,
-        data: {
-          title: convertData.title || title,
-          artist: 'Unknown Artist',
-          duration: '',
-          thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-          audioUrl: convertData.dlink,
-          platform: 'youtube',
-        },
-      };
+      lastError = data.msg || 'Unknown response status';
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'unknown error';
-      errors.push(`${host}: ${msg}`);
-      continue;
+      lastError = error instanceof Error ? error.message : 'Request failed';
+      console.error('RapidAPI error:', lastError);
     }
   }
 
-  return {
-    success: false,
-    error: `Y2Mate failed on all hosts. Errors: ${errors.join('; ')}`,
-  };
+  return { success: false, error: `RapidAPI failed: ${lastError}` };
 }
 
 serve(async (req) => {
@@ -251,12 +151,24 @@ serve(async (req) => {
 
     // Validate URL
     const validUrl = url.trim();
-    const isYouTube = validUrl.includes('youtube.com') || validUrl.includes('youtu.be') || validUrl.includes('music.youtube.com');
+    const isYouTube =
+      validUrl.includes('youtube.com') ||
+      validUrl.includes('youtu.be') ||
+      validUrl.includes('music.youtube.com');
     const isSoundCloud = validUrl.includes('soundcloud.com');
 
     if (!isYouTube && !isSoundCloud) {
       return new Response(
         JSON.stringify({ success: false, error: 'Only YouTube and SoundCloud URLs are supported' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Extract video ID
+    const videoId = extractYouTubeVideoId(validUrl);
+    if (!videoId) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Could not extract video ID from URL' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -267,8 +179,8 @@ serve(async (req) => {
       metadata = await fetchYouTubeMetadata(validUrl);
     }
 
-    // Try Y2Mate API
-    const downloadResult = await fetchFromY2Mate(validUrl);
+    // Try RapidAPI
+    const downloadResult = await fetchFromRapidAPI(videoId);
 
     if (!downloadResult.success) {
       return new Response(
