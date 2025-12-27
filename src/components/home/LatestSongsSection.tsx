@@ -36,12 +36,12 @@ const LatestSongsSection = () => {
   });
 
   return (
-    <section className="py-16 md:py-24">
-      <div className="container mx-auto px-4">
+    <section className="py-20 md:py-28 px-4 md:px-6 lg:px-8">
+      <div className="container mx-auto">
         {/* Section Header */}
-        <div className="flex items-center justify-between mb-10">
+        <div className="flex items-center justify-between mb-12 md:mb-14 px-2">
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground">Latest Releases</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Latest Releases</h2>
             <p className="text-muted-foreground mt-1">Fresh tracks added daily</p>
           </div>
           <Link to="/songs">
@@ -53,7 +53,7 @@ const LatestSongsSection = () => {
         </div>
 
         {/* Songs Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 md:gap-7 lg:gap-8 px-2">
           {isLoading ? (
             Array.from({ length: 8 }).map((_, index) => (
               <div key={index} className="space-y-3">
@@ -63,7 +63,7 @@ const LatestSongsSection = () => {
               </div>
             ))
           ) : latestSongs.length === 0 ? (
-            <p className="col-span-full text-center text-muted-foreground py-8">No songs available yet.</p>
+            <p className="col-span-full text-center text-muted-foreground py-12">No songs available yet.</p>
           ) : (
             latestSongs.map((song, index) => (
               <div
